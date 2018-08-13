@@ -5,13 +5,14 @@ class CPU(val memory: Memory) {
   var xRegister: Byte = 0
   var yRegister: Byte = 0
   var programCounter: Int = memory.readTwoBytes(0xFFFC)
-  var stackPointer: Byte = 0
+  var stackPointer: Byte = 0xFF.toByte
 
   // processor status
   var carryFlag = false
   var zeroFlag = false
   var interruptDisable = false
   var decimalMode = false
+  var overflowFlag = false
   var negativeFlag = false
 
   def tick(log: Boolean): Int = {
@@ -20,6 +21,7 @@ class CPU(val memory: Memory) {
     })
 
     val currentCounter = programCounter
+    print(programCounter.formatted("%x").toUpperCase + " ")
     programCounter += currentInstruction.argsSize + 1
     val cyclesCount = currentInstruction.run(i => memory.read(currentCounter + 1 + i), log)(this)
     cyclesCount

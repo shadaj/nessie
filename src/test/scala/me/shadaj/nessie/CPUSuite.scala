@@ -5,6 +5,7 @@ import java.io.File
 import org.scalatest.FunSuite
 
 class CPUSuite extends FunSuite {
+  private val nestest = NESFile.fromFile(new File("test-roms/nestest.nes"))
   private val basics = NESFile.fromFile(new File("test-roms/01-basics.nes"))
 
   test("Can execute some instructions from basic test ROM and report cycle count") {
@@ -19,8 +20,10 @@ class CPUSuite extends FunSuite {
   }
 
   test("Can run full basic test ROM") {
-    val memory = new Memory(Seq(new NESRam, new PPURegisters, new Mapper0(basics.programRom)))
+    val memory = new Memory(Seq(new NESRam, new PPURegisters, new Mapper0(nestest.programRom)))
     val cpu = new CPU(memory)
+
+    cpu.programCounter = 0xC000
 
     println("------ begin basic test ------")
     while (true) {
