@@ -50,7 +50,9 @@ class CPUSuite extends FunSuite {
   def runTestROM(file: NESFile) = {
     var isDone = false
 
-    val memory = new Memory(Seq(new NESRam, new PPURegisters, new APUIORegisters, new Mapper0(file.programRom), new MemoryProvider {
+    val memory = new Memory(Seq(new NESRam, new PPURegisters, new APUIORegisters,
+      if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom),
+      new MemoryProvider {
       private val stringMemory = new Array[Byte](256)
       override def contains(address: Int): Boolean = address >= 0x6000
 
@@ -81,5 +83,9 @@ class CPUSuite extends FunSuite {
 
   test("Can run 02-implied test ROM") {
     runTestROM(NESFile.fromFile(new File("test-roms/02-implied.nes")))
+  }
+
+  test("Can run official_only test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/official_only.nes")))
   }
 }

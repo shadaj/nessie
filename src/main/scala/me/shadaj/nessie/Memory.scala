@@ -62,6 +62,28 @@ class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
   }
 }
 
+class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
+  override def contains(address: Int): Boolean = address >= 0x8000
+  override def read(address: Int): Byte = {
+    if (address >= 0x8000 && address < 0xC000) {
+      prgRom(address - 0x8000)
+    } else if (address >= 0xC000) {
+      if (prgRom.length > 16 * 1024) {
+        prgRom(address - 0x8000)
+      } else {
+        // mirrored memory
+        prgRom(address - 0xC000)
+      }
+    } else {
+      throw new IllegalArgumentException(s"Cannot read program ROM at address $address")
+    }
+  }
+
+  override def write(address: Int, value: Byte): Unit = {
+    // TODO: figure out when writing is actually allowed
+  }
+}
+
 class PPURegisters extends MemoryProvider {
   val memory = new Array[Byte](8)
 
