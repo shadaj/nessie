@@ -21,7 +21,7 @@ object LoadInstructions {
       case _: IndirectX => 6
       case _: IndirectIndexed => 5
     }
-  }} ++ Instruction.generateNonIndirectXAddressTypes("LDX")(
+  }} ++ Instruction.generateNonIndirectYAddressTypes("LDX")(
     0xA2, 0xA6, 0xB6, 0xAE, 0xBE
   ) { (value, addr, cpu) =>
     cpu.xRegister = value
@@ -30,9 +30,9 @@ object LoadInstructions {
     addr match {
       case _: Immediate => 2
       case _: ZeroPage => 3
-      case _: ZeroPageX => 4
+      case _: ZeroPageY => 4
       case _: Absolute => 4
-      case _: AbsoluteX => 4 // TODO: page cross
+      case _: AbsoluteY => 4 // TODO: page cross
     }
   } ++ Instruction.generateNonIndirectXAddressTypes("LDY")(
     0xA0, 0xA4, 0xB4, 0xAC, 0xBC

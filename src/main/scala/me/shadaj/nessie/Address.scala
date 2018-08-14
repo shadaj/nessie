@@ -48,6 +48,24 @@ object ZeroPageX {
   }
 }
 
+case class ZeroPageY(indirect: Int, y: Int) extends Address {
+  val address = (indirect + y) & 0xFF // wraps around
+  override def toString: String = f"${"$"}$indirect%x,$y (zeropage,y)"
+}
+
+object ZeroPageY {
+  implicit val parser: ArgParser[ZeroPageY] = new ArgParser[ZeroPageY] {
+    override val size: Int = 1
+
+    override def parse(getArg: Int => Byte, cpu: CPU): ZeroPageY = {
+      ZeroPageY(
+        java.lang.Byte.toUnsignedInt(getArg(0)),
+        toUnsignedInt(cpu.yRegister)
+      )
+    }
+  }
+}
+
 case class Absolute(twoBytes: Int) extends Address {
   val address = twoBytes
   override def toString: String = twoBytes.formatted("$%x".toUpperCase)
@@ -86,8 +104,8 @@ object AbsoluteX {
 }
 
 case class AbsoluteY(absolute: Int, y: Int) extends Address {
-  val address = absolute + y
-  override def toString: String = f"${"$"}$absolute%x,$y (abs,y)"
+  val address = (absolute + y) & 0xFFFF
+  override def toString: String = f"${"$"}$absolute%x,Y=$y = $address%X"
 }
 
 object AbsoluteY {
@@ -104,8 +122,24 @@ object AbsoluteY {
   }
 }
 
+case class Indirect(indirect: Int, address: Int) extends Address {
+  override def toString: String = f"(${"$"}$indirect%X) = $address%X"
+}
+
+object Indirect {
+  implicit val parser: ArgParser[Indirect] = new ArgParser[Indirect] {
+    override val size: Int = 2
+
+    override def parse(getArg: Int => Byte, cpu: CPU): Indirect = {
+      import java.lang.Byte.toUnsignedInt
+      val indirect = toUnsignedInt(getArg(0)) | (toUnsignedInt(getArg(1)) << 8)
+      Indirect(indirect, cpu.memory.readTwoBytesBug(indirect))
+    }
+  }
+}
+
 case class IndirectIndexed(indirect: Int, y: Int) extends Address {
-  val address = indirect + y
+  val address = (indirect + y) & 0xFFFF
   override def toString: String = f"${"$"}$indirect%x,$y (ind,y)"
 }
 

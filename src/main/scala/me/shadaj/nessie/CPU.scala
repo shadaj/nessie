@@ -37,7 +37,9 @@ class CPU(val memory: Memory) {
     })
 
     val currentCounter = programCounter
-    print(programCounter.formatted("%x").toUpperCase + " ")
+    if (log) {
+      print(programCounter.formatted("%x").toUpperCase + " ")
+    }
     programCounter += currentInstruction.argsSize + 1
     val cyclesCount = currentInstruction.run(i => memory.read(currentCounter + 1 + i), log)(this)
     cyclesCount

@@ -76,3 +76,18 @@ class PPURegisters extends MemoryProvider {
     memory((address - 0x2000) % 8 /* mirroring! */) = value
   }
 }
+
+class APUIORegisters extends MemoryProvider {
+  val memory = new Array[Byte](24)
+
+  override def contains(address: Int): Boolean = address >= 0x4000 && address < 0x4018
+
+  override def read(address: Int): Byte = {
+    memory(address - 0x4000)
+  }
+
+  override def write(address: Int, value: Byte): Unit = {
+    // TODO: are registers read only?
+    memory(address - 0x4000) = value
+  }
+}

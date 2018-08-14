@@ -105,6 +105,22 @@ object Instruction {
     )
   }
 
+  def generateNonIndirectYAddressTypes(name: String)
+                                      (immediate: Int,
+                                       zeroPage: Int,
+                                       zeroPageY: Int,
+                                       absolute: Int,
+                                       absoluteY: Int)(process: (Byte, Address, CPU) => Int): Seq[Instruction[_ <: HList]] = {
+    generateNonIndirectNoRegisterTypes(name)(immediate, zeroPage, absolute)(process) ++ Seq(
+      Instruction[ZeroPageY :: HNil](zeroPageY, name) { case (addr :: HNil, cpu) =>
+        process(cpu.memory.read(addr.address), addr, cpu)
+      },
+      Instruction[AbsoluteY :: HNil](absoluteY, name) { case (addr :: HNil, cpu) =>
+        process(cpu.memory.read(addr.address), addr, cpu)
+      }
+    )
+  }
+
   def generateNonIndirectNoRegisterTypes(name: String)
                                         (immediate: Int,
                                          zeroPage: Int,
@@ -128,13 +144,22 @@ object Instruction {
                           zeroPageX: Int,
                           absolute: Int,
                           absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList]] = {
-    Seq(
+    generateMemoryModifyTypes(name)(zeroPage, zeroPageX, absolute, absoluteX)(process) ++ Seq(
       Instruction[HNil](accumulator, name) { (_, cpu) =>
         val value = cpu.accumulator
         val (ret, cycles) = process(value, Accumulator, cpu)
         cpu.accumulator = ret
         cycles
-      },
+      }
+    )
+  }
+
+  def generateMemoryModifyTypes(name: String)
+                         (zeroPage: Int,
+                          zeroPageX: Int,
+                          absolute: Int,
+                          absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList]] = {
+    Seq(
       Instruction[ZeroPage :: HNil](zeroPage, name) { case (addr :: HNil, cpu) =>
         val value = cpu.memory.read(addr.address)
         val (ret, cycles) = process(value, addr, cpu)
@@ -387,6 +412,30 @@ object Instruction {
         case _: Absolute => (rotated, 6)
         case _: AbsoluteX => (rotated, 7)
       }
+    } ++ generateMemoryModifyTypes("INC")(
+      0xE6, 0xF6, 0xEE, 0xFE
+    ) { (value, addr, cpu) =>
+      val inced = (value + 1).toByte
+      setZeroNeg(inced, cpu)
+
+      addr match {
+        case _: ZeroPage => (inced, 5)
+        case _: ZeroPageX => (inced, 6)
+        case _: Absolute => (inced, 6)
+        case _: AbsoluteX => (inced, 7)
+      }
+    } ++ generateMemoryModifyTypes("DEC")(
+      0xC6, 0xD6, 0xCE, 0xDE
+    ) { (value, addr, cpu) =>
+      val deced = (value - 1).toByte
+      setZeroNeg(deced, cpu)
+
+      addr match {
+        case _: ZeroPage => (deced, 5)
+        case _: ZeroPageX => (deced, 6)
+        case _: Absolute => (deced, 6)
+        case _: AbsoluteX => (deced, 7)
+      }
     } ++ Seq(
       Instruction[ZeroPage :: HNil](0x24, "BIT") { case (addr :: HNil, cpu) =>
         val memoryValue = cpu.memory.read(addr.address)
@@ -440,17 +489,6 @@ object Instruction {
         2
       },
 
-      Instruction[ZeroPage :: HNil](0xE6, "INC") { case (ZeroPage(address) :: HNil, cpu) =>
-        val newValue = (cpu.memory.read(address) + 1).toByte
-
-        cpu.zeroFlag = newValue == 0
-        cpu.negativeFlag = newValue < 0
-
-        cpu.memory.write(address, newValue)
-
-        5
-      },
-
       Instruction[HNil](0xE8, "INX") { (_, cpu) =>
         cpu.xRegister = (cpu.xRegister + 1).toByte
         cpu.zeroFlag = cpu.xRegister == 0
@@ -468,6 +506,10 @@ object Instruction {
       Instruction[Absolute :: HNil](0x4C, "JMP") { case (Absolute(address) :: HNil, cpu) =>
         cpu.programCounter = address
         3
+      },
+      Instruction[Indirect :: HNil](0x6C, "JMP") { case (addr :: HNil, cpu) =>
+        cpu.programCounter = addr.address
+        5
       },
 
       Instruction[Absolute :: HNil](0x20, "JSR") { case (Absolute(address) :: HNil, cpu) =>
