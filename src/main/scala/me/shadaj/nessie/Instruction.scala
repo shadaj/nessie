@@ -522,7 +522,25 @@ object Instruction {
         6
       },
 
+      Instruction[HNil](0x1A, "NOP") { (_, _) =>
+        2
+      },
+      Instruction[HNil](0x3A, "NOP") { (_, _) =>
+        2
+      },
+      Instruction[HNil](0x5A, "NOP") { (_, _) =>
+        2
+      },
+      Instruction[HNil](0x7A, "NOP") { (_, _) =>
+        2
+      },
+      Instruction[HNil](0xDA, "NOP") { (_, _) =>
+        2
+      },
       Instruction[HNil](0xEA, "NOP") { (_, _) =>
+        2
+      },
+      Instruction[HNil](0xFA, "NOP") { (_, _) =>
         2
       },
 

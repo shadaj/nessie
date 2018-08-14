@@ -74,4 +74,12 @@ class CPUSuite extends FunSuite {
       cpu.tick
     }
   }
+
+  test("Can run 01-basics test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/01-basics.nes")))
+  }
+
+  test("Can run 02-implied test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/02-implied.nes")))
+  }
 }
