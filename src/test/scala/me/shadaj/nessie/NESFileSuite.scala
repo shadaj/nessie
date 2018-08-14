@@ -4,6 +4,8 @@ import java.io.File
 
 import org.scalatest.FunSuite
 
+import scala.io.Source
+
 class NESFileSuite extends FunSuite {
   test("Can load .nes files") {
     val loaded = NESFile.fromFile(new File("test-roms/01-basics.nes"))

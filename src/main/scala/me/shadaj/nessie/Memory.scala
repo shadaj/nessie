@@ -9,11 +9,20 @@ trait MemoryProvider {
 class Memory(providers: Seq[MemoryProvider]) {
   def read(address: Int): Byte = providers.find(_.contains(address)).get.read(address)
 
-  def write(address: Int, value: Byte): Unit = providers.find(_.contains(address)).get.write(address, value)
+  def write(address: Int, value: Byte): Unit = {
+    providers.find(_.contains(address)).get.write(address, value)
+  }
 
   def readTwoBytes(address: Int): Int = {
     import java.lang.Byte.toUnsignedInt
     toUnsignedInt(read(address)) | (toUnsignedInt(read(address + 1)) << 8)
+  }
+
+  // 6502 has a bug in indirect mode where the low byte wraps around without the upper byte changing
+  def readTwoBytesBug(address: Int): Int = {
+    import java.lang.Byte.toUnsignedInt
+    val highAddress = (address & 0xFF00) | ((address + 1) & 0xFF)
+    toUnsignedInt(read(address)) | (toUnsignedInt(read(highAddress)) << 8)
   }
 }
 

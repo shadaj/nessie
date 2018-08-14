@@ -5,7 +5,7 @@ class CPU(val memory: Memory) {
   var xRegister: Byte = 0
   var yRegister: Byte = 0
   var programCounter: Int = memory.readTwoBytes(0xFFFC)
-  var stackPointer: Byte = 0xFF.toByte
+  var stackPointer: Byte = 0xFD.toByte
 
   // processor status
   var carryFlag = false
@@ -14,6 +14,22 @@ class CPU(val memory: Memory) {
   var decimalMode = false
   var overflowFlag = false
   var negativeFlag = false
+
+  def atIndex(value: Boolean, index: Int): Byte = {
+    ((if (value) 1 else 0) << index).toByte
+  }
+
+  def statusRegister = {
+    (0
+      | atIndex(carryFlag, 0)
+      | atIndex(zeroFlag, 1)
+      | atIndex(interruptDisable, 2)
+      | atIndex(decimalMode, 3)
+      | atIndex(true, 4)
+      | atIndex(true, 5)
+      | atIndex(overflowFlag, 6)
+      | atIndex(negativeFlag, 7)).toByte
+  }
 
   def tick(log: Boolean): Int = {
     val currentInstruction = Instruction.cpuInstructions.getOrElse(memory.read(programCounter), {
