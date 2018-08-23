@@ -15,6 +15,8 @@ class CPU(val memory: Memory) {
   var overflowFlag = false
   var negativeFlag = false
 
+  var interruptAddress: Option[Int] = None
+
   def atIndex(value: Boolean, index: Int): Byte = {
     ((if (value) 1 else 0) << index).toByte
   }
@@ -32,6 +34,20 @@ class CPU(val memory: Memory) {
   }
 
   def tick(log: Boolean): Int = {
+    val handleInterruptCycles = interruptAddress.map { a =>
+      interruptAddress = None
+      val addressToPush = programCounter
+      Instruction.pushToStack((addressToPush >> 8).toByte, this)
+      Instruction.pushToStack((addressToPush & 0xFF).toByte, this)
+
+      Instruction.pushToStack(statusRegister, this)
+
+      programCounter = a
+      interruptDisable = true
+
+      7
+    }.getOrElse(0)
+
     val currentInstruction = Instruction.cpuInstructions.getOrElse(memory.read(programCounter), {
       throw new IllegalArgumentException(s"Unknown instruction: ${memory.read(programCounter).formatted("0x%x")}")
     })
@@ -41,9 +57,12 @@ class CPU(val memory: Memory) {
       print(programCounter.formatted("%x").toUpperCase + " ")
     }
     programCounter += currentInstruction.argsSize + 1
-    val cyclesCount = currentInstruction.run(i => memory.read(currentCounter + 1 + i), log)(this)
-    cyclesCount
+    handleInterruptCycles + currentInstruction.run(i => memory.read(currentCounter + 1 + i), log)(this)
   }
 
   def tick: Int = tick(false)
+
+  def runNMI: Unit = {
+    interruptAddress = Some(memory.readTwoBytes(0xFFFA))
+  }
 }

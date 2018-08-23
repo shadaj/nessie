@@ -2,15 +2,15 @@ package me.shadaj.nessie
 
 trait MemoryProvider {
   def contains(address: Int): Boolean
-  def read(address: Int): Byte
-  def write(address: Int, value: Byte): Unit
+  def read(address: Int, memory: Memory): Byte
+  def write(address: Int, value: Byte, memory: Memory): Unit
 }
 
 class Memory(providers: Seq[MemoryProvider]) {
-  def read(address: Int): Byte = providers.find(_.contains(address)).get.read(address)
+  def read(address: Int): Byte = providers.find(_.contains(address)).get.read(address, this)
 
   def write(address: Int, value: Byte): Unit = {
-    providers.find(_.contains(address)).get.write(address, value)
+    providers.find(_.contains(address)).get.write(address, value, this)
   }
 
   def readTwoBytes(address: Int): Int = {
@@ -31,18 +31,18 @@ class NESRam extends MemoryProvider {
 
   override def contains(address: Int): Boolean = address >= 0x0 && address <= 0x1FFF
 
-  override def read(address: Int): Byte = {
+  override def read(address: Int, memoryAccess: Memory): Byte = {
     memory(address % 2048)
   }
 
-  def write(address: Int, value: Byte): Unit = {
+  def write(address: Int, value: Byte, memoryAccess: Memory): Unit = {
     memory(address % 2048) = value
   }
 }
 
 class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
   override def contains(address: Int): Boolean = address >= 0x8000
-  override def read(address: Int): Byte = {
+  override def read(address: Int, memory: Memory): Byte = {
     if (address >= 0x8000 && address < 0xC000) {
       prgRom(address - 0x8000)
     } else if (address >= 0xC000) {
@@ -57,14 +57,14 @@ class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
     }
   }
 
-  override def write(address: Int, value: Byte): Unit = {
+  override def write(address: Int, value: Byte, memory: Memory): Unit = {
     throw new UnsupportedOperationException(s"Cannot write to program ROM, address $address was given")
   }
 }
 
 class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
   override def contains(address: Int): Boolean = address >= 0x8000
-  override def read(address: Int): Byte = {
+  override def read(address: Int, memory: Memory): Byte = {
     if (address >= 0x8000 && address < 0xC000) {
       prgRom(address - 0x8000)
     } else if (address >= 0xC000) {
@@ -79,36 +79,21 @@ class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
     }
   }
 
-  override def write(address: Int, value: Byte): Unit = {
+  override def write(address: Int, value: Byte, memory: Memory): Unit = {
     // TODO: figure out when writing is actually allowed
-  }
-}
-
-class PPURegisters extends MemoryProvider {
-  val memory = new Array[Byte](8)
-
-  override def contains(address: Int): Boolean = address >= 0x2000 && address < 0x4000
-
-  override def read(address: Int): Byte = {
-    memory((address - 0x2000) % 8 /* mirroring! */)
-  }
-
-  override def write(address: Int, value: Byte): Unit = {
-    // TODO: some ppu registers are read-only
-    memory((address - 0x2000) % 8 /* mirroring! */) = value
   }
 }
 
 class APUIORegisters extends MemoryProvider {
   val memory = new Array[Byte](24)
 
-  override def contains(address: Int): Boolean = address >= 0x4000 && address < 0x4018
+  override def contains(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014
 
-  override def read(address: Int): Byte = {
+  override def read(address: Int, memoryAccess: Memory): Byte = {
     memory(address - 0x4000)
   }
 
-  override def write(address: Int, value: Byte): Unit = {
+  override def write(address: Int, value: Byte, memoryAccess: Memory): Unit = {
     // TODO: are registers read only?
     memory(address - 0x4000) = value
   }

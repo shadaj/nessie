@@ -1,7 +1,9 @@
 package me.shadaj.nessie
 
+import java.awt.{Color, Graphics}
 import java.io.File
 
+import javax.swing.JFrame
 import org.scalatest.FunSuite
 
 import scala.io.Source
@@ -12,7 +14,7 @@ class CPUSuite extends FunSuite {
   private val officialOnly = NESFile.fromFile(new File("test-roms/official_only.nes"))
 
   test("Can execute some instructions from basic test ROM and report cycle count") {
-    val memory = new Memory(Seq(new NESRam, new PPURegisters, new Mapper0(basics.programRom)))
+    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new Mapper0(basics.programRom)))
     val cpu = new CPU(memory)
     assert(cpu.tick == 2) // SEI
     assert(cpu.tick == 3) // JMP $EB12
@@ -23,7 +25,7 @@ class CPUSuite extends FunSuite {
   }
 
   test("Can run nestest ROM through invalid opcodes (0x04)") {
-    val memory = new Memory(Seq(new NESRam, new PPURegisters, new Mapper0(nestest.programRom)))
+    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new Mapper0(nestest.programRom)))
     val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000
@@ -50,15 +52,15 @@ class CPUSuite extends FunSuite {
   def runTestROM(file: NESFile) = {
     var isDone = false
 
-    val memory = new Memory(Seq(new NESRam, new PPURegisters, new APUIORegisters,
+    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new APUIORegisters,
       if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom),
-      new MemoryProvider {
+      new MemoryProvider { // test ROMs write the result text here
       private val stringMemory = new Array[Byte](256)
       override def contains(address: Int): Boolean = address >= 0x6000
 
-      override def read(address: Int): Byte = ???
+      override def read(address: Int, memory: Memory): Byte = ???
 
-      override def write(address: Int, value: Byte): Unit = {
+      override def write(address: Int, value: Byte, memory: Memory): Unit = {
         if (address >= 0x6004) {
           stringMemory(address - 0x6004) = value
         }
@@ -87,5 +89,33 @@ class CPUSuite extends FunSuite {
 
   test("Can run official_only test ROM") {
     runTestROM(NESFile.fromFile(new File("test-roms/official_only.nes")))
+  }
+
+  test("color test?") {
+    var currentFrame: Array[Array[(Int, Int, Int)]] = null
+    val frame: JFrame = new JFrame() {
+      override def paint(g: Graphics): Unit = {
+        if (currentFrame != null) {
+          currentFrame.zipWithIndex.foreach { case (line, y) =>
+            line.zipWithIndex.foreach { case (pixel, x) =>
+              g.setColor(new Color(pixel._1, pixel._2, pixel._3))
+              g.drawRect(x, y, 1, 1)
+            }
+          }
+        }
+      }
+    }
+
+    frame.setSize(256, 240)
+    frame.setVisible(true)
+
+    val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/donkey-kong.nes")), f => {
+      currentFrame = f
+      frame.repaint()
+    })
+
+    while (true) {
+      console.tick()
+    }
   }
 }
