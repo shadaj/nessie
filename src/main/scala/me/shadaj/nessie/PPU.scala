@@ -1,5 +1,7 @@
 package me.shadaj.nessie
 
+import scala.collection.mutable
+
 case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes: Int) {
   def isVisible = yPosition < 0xEF
 }
@@ -11,6 +13,10 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   var currentScroll: Either[Byte, (Byte, Byte)] = Right((0, 0))
   var currentOamData: Vector[Byte] = Vector.empty
   var currentSprites: Vector[Sprite] = Vector.empty
+  var backgroundPatternTable1 = false
+
+  val nametableA = Array.fill[Byte](30, 32)(0)
+  val attributeA = Array.fill[Byte](8, 8)(0)
 
   var universalBackgroundColor = 0
 
@@ -45,10 +51,13 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
         actualAddress match {
           case 0x0 =>
             nmiOnBlank = ((value >>> 7) & 1) == 1
+            backgroundPatternTable1 = ((value >>> 4) & 1) == 1
           case 0x1 =>
 
           case 0x3 =>
             oamAddress = value
+
+          case 0x4 =>
           case 0x5 =>
             if (currentScroll.isLeft) {
               currentScroll = Right((currentScroll.left.get, value))
@@ -63,13 +72,19 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
             }
           case 0x7 =>
             val addr = currentPPUAddr.right.get
-            println(f"data at ${currentPPUAddr.right.get}%X = $value%X")
-            if (addr == 0x3F00) {
-              universalBackgroundColor = value
-            }
 
-            if (addr >= 0x3F00 && addr < 0x3F20) {
+            if (addr >= 0x2000 && addr < (0x2000 + (30 * 32))) {
+              val relative = addr - 0x2000
+              nametableA(relative / 32)(relative % 32) = value
+            } else if (addr >= (0x2000 + (30 * 32)) && addr < 0x2400) {
+              val relative = addr - (0x2000 + (30 * 32))
+              attributeA(relative / 8)(relative % 8) = value
+            } else if (addr == 0x3F00) {
+              universalBackgroundColor = value
+            } else if (addr >= 0x3F00 && addr < 0x3F20) {
               paletteMemory(addr - 0x3F00) = value
+            } else {
+              println(f"data at ${currentPPUAddr.right.get}%X = $value%X")
             }
 
             currentPPUAddr = Right(currentPPUAddr.right.get + 1).right.map(_ % 0x4000)
@@ -92,43 +107,75 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
     (7 to 0 by -1).map(shift => (byte >>> shift) & 1)
   }
 
+  val patternMemo = mutable.Map.empty[(Int, Int), Seq[Seq[Int]]]
+
+  def readPattern(baseTable: Int, index: Int, flipVertical: Boolean = false, flipHorizontal: Boolean = false): Seq[Seq[Int]] = {
+    val combinedPlanesPreFlip = patternMemo.getOrElseUpdate((baseTable, index), {
+      val patternBytes = (index * 16 until ((index + 1) * 16)).map(i => ppuMappedMemory.read(baseTable + i, null))
+      val planeOne = patternBytes.take(8).map(byteToBits)
+      val planeTwo = patternBytes.drop(8).map(byteToBits)
+
+      planeOne.zip(planeTwo).map(rs => rs._1.zip(rs._2)).map { row =>
+        row.map(p => (p._2 << 1) | p._1)
+      }
+    })
+
+    val verticalFlip = if (flipVertical) combinedPlanesPreFlip.view.reverse else combinedPlanesPreFlip
+    if (flipHorizontal) verticalFlip.map(_.view.reverse) else verticalFlip
+  }
+
+  def getSpritePixelAt(x: Int, y: Int) = {
+    currentSprites.find(s => x >= s.xPosition && x < (s.xPosition + 8) && y >= s.yPosition && y < (s.yPosition + 8)).flatMap { s =>
+      val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
+      val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
+
+      val combinedPlanes = readPattern(0x0, s.patternIndex, shouldFlipVertically, shouldFlipHorizontally)
+
+      val relativePixelX = x - s.xPosition
+      val relativePixelY = y - s.yPosition
+      val paletteIndex = combinedPlanes(relativePixelY)(relativePixelX)
+
+      val basePaletteAddress = 0x10 + ((s.attributes % 4) << 2)
+
+      if (paletteIndex != 0) {
+        Some(nesToRGB(paletteMemory(basePaletteAddress + paletteIndex)))
+      } else {
+        None
+      }
+    }
+  }
+
+  var lastFrameTime = System.currentTimeMillis()
+
   def step(): Unit = {
     if (currentLine >= 0 && currentLine < 240 && currentX >= 1 && currentX <= 256) {
       val pixelX = currentX - 1
-      val pixelY = currentLine - 8 // TODO: is this right
+      val pixelY = currentLine
       val color =
-        currentSprites.find(s => pixelX >= s.xPosition && pixelX < (s.xPosition + 8) && pixelY >= s.yPosition && pixelY < (s.yPosition + 8)).map { s =>
-          val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
-          val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
+        getSpritePixelAt(pixelX, pixelY).
+          orElse {
+            val tileIndexX = pixelX / 8
+            val tileIndexY = pixelY / 8
+            val combinedPlanes = readPattern(
+              if (backgroundPatternTable1) 0x1000 else 0x0,
+              java.lang.Byte.toUnsignedInt(nametableA(tileIndexY)(tileIndexX))
+            )
 
-          val patternBytes = (s.patternIndex * 16 until ((s.patternIndex + 1) * 16)).map(i => ppuMappedMemory.read(i, null))
-          val planeOne = patternBytes.take(8).map(byteToBits)
-          val planeTwo = patternBytes.drop(8).map(byteToBits)
-          val combinedPlanesPreFlip = planeOne.zip(planeTwo).map(rs => rs._1.zip(rs._2)).map { row =>
-            val origRow = row.map(p => (p._2 << 1) | p._1)
-            if (shouldFlipHorizontally) origRow.reverse else origRow
-          }
+            val relativePixelX = pixelX % 8
+            val relativePixelY = pixelY % 8
+            val paletteIndex = combinedPlanes(relativePixelY)(relativePixelX)
 
-          val combinedPlanes = if (shouldFlipVertically) combinedPlanesPreFlip.reverse else combinedPlanesPreFlip
-
-          val relativePixelX = pixelX - s.xPosition
-          val relativePixelY = pixelY - s.yPosition
-          val paletteIndex = combinedPlanes(relativePixelY)(relativePixelX)
-
-          val basePaletteAddress = 0x11 + (s.attributes % 4)
-
-          if (paletteIndex != 0) {
-            if (paletteIndex == 1) {
-              nesToRGB(paletteMemory(basePaletteAddress))
-            } else if (paletteIndex == 2) {
-              nesToRGB(paletteMemory(basePaletteAddress + 1))
+            if (paletteIndex != 0) {
+              val attributeValue = attributeA(tileIndexY / 4)(tileIndexX / 4)
+              val xSide = (tileIndexX % 4) / 2
+              val ySide = (tileIndexY % 4) / 2
+              val shiftNeeded = (xSide + (ySide * 2)) * 2
+              val basePaletteAddress = (java.lang.Byte.toUnsignedInt((attributeValue >>> shiftNeeded).toByte) % 4) << 2
+              Some(nesToRGB(paletteMemory(basePaletteAddress | paletteIndex)))
             } else {
-              nesToRGB(paletteMemory(basePaletteAddress + 2))
+              None
             }
-          } else {
-            nesToRGB(universalBackgroundColor)
-          }
-        }.getOrElse(nesToRGB(universalBackgroundColor))
+          }.getOrElse(nesToRGB(universalBackgroundColor))
 
       currentImage(currentLine)(currentX - 1) = color
     }
@@ -136,10 +183,11 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
     if (currentLine == 240 && currentX == 0) {
       drawFrame(currentImage)
 
+      println(System.currentTimeMillis() - lastFrameTime)
+      lastFrameTime = System.currentTimeMillis()
+
       if (nmiOnBlank) {
         runNMI()
-      } else {
-        println("no nmi?")
       }
     }
 

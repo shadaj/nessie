@@ -93,23 +93,24 @@ class CPUSuite extends FunSuite {
 
   test("color test?") {
     var currentFrame: Array[Array[(Int, Int, Int)]] = null
+    val scale = 3
     val frame: JFrame = new JFrame() {
       override def paint(g: Graphics): Unit = {
         if (currentFrame != null) {
           currentFrame.zipWithIndex.foreach { case (line, y) =>
             line.zipWithIndex.foreach { case (pixel, x) =>
               g.setColor(new Color(pixel._1, pixel._2, pixel._3))
-              g.drawRect(x, y, 1, 1)
+              g.fillRect(x * scale, y * scale, scale, scale)
             }
           }
         }
       }
     }
 
-    frame.setSize(256, 240)
+    frame.setSize(256 * scale, 240 * scale)
     frame.setVisible(true)
 
-    val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/donkey-kong.nes")), f => {
+    val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/zelda/Zelda.NES")), f => {
       currentFrame = f
       frame.repaint()
     })

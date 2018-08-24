@@ -4,7 +4,7 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
   val ppu = new PPU(() => {
     cpu.runNMI
   }, new MemoryProvider {
-    override def contains(address: Int): Boolean = address < 0x1000
+    override def contains(address: Int): Boolean = address < 0x2000
 
     override def read(address: Int, memory: Memory): Byte = file.chrRom(address)
 
