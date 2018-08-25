@@ -14,7 +14,7 @@ class CPUSuite extends FunSuite {
   private val officialOnly = NESFile.fromFile(new File("test-roms/official_only.nes"))
 
   test("Can execute some instructions from basic test ROM and report cycle count") {
-    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new Mapper0(basics.programRom)))
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(basics.programRom)))
     val cpu = new CPU(memory)
     assert(cpu.tick == 2) // SEI
     assert(cpu.tick == 3) // JMP $EB12
@@ -25,7 +25,7 @@ class CPUSuite extends FunSuite {
   }
 
   test("Can run nestest ROM through invalid opcodes (0x04)") {
-    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new Mapper0(nestest.programRom)))
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom)))
     val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000
@@ -52,7 +52,7 @@ class CPUSuite extends FunSuite {
   def runTestROM(file: NESFile) = {
     var isDone = false
 
-    val memory = new Memory(Seq(new NESRam, (new PPU(null, null, _ => {})).cpuMemoryMapping, new APUIORegisters,
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new APUIORegisters,
       if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom),
       new MemoryProvider { // test ROMs write the result text here
       private val stringMemory = new Array[Byte](256)
@@ -110,7 +110,7 @@ class CPUSuite extends FunSuite {
     frame.setSize(256 * scale, 240 * scale)
     frame.setVisible(true)
 
-    val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/zelda/Zelda.NES")), f => {
+    val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/donkey-kong.nes")), f => {
       currentFrame = f
       frame.repaint()
     })

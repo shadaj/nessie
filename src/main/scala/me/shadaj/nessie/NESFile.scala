@@ -12,7 +12,7 @@ object NESFile {
   // see http://wiki.nesdev.com/w/index.php/INES
   def fromBytes(bytes: Array[Byte]): NESFile = {
     // check start of header: NES + MS-DOS eof
-    val header = bytes.slice(0, 16)
+    val (header, afterHeader) = bytes.splitAt(16)
     assert(header(0) == 0x4E && header(1) == 0x45 && header(2) == 0x53 && header(3) == 0x1A)
     val prgRomSize = header(4) * 16 * 1024 // stored in 16 KB units
     val chrRomSize = header(5) * 8 * 1024 // stored in 8 KB units
@@ -24,9 +24,9 @@ object NESFile {
     val mapperNumberUpperNibble = flagsSeven >> 4
     val mapperNumber = (mapperNumberUpperNibble << 4) | mapperNumberLowerNibble
 
-    val prgRom = bytes.drop(16).take(prgRomSize)
+    val (prgRom, afterPrg) = afterHeader.splitAt(prgRomSize)
 
-    NESFile(prgRom, bytes.drop(16 + prgRomSize).take(chrRomSize), mapperNumber.toShort)
+    NESFile(prgRom, afterPrg.take(chrRomSize), mapperNumber.toShort)
   }
 
   def fromFile(file: File): NESFile = fromBytes(Files.readAllBytes(file.toPath))
