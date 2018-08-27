@@ -1,6 +1,6 @@
 package me.shadaj.nessie
 
-class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
+class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, currentButtonState: () => Seq[Boolean]) {
   val ppu = new PPU(() => {
     cpu.runNMI
   }, new MemoryProvider {
@@ -13,11 +13,17 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
 
   println(file.mapperNumber)
 
-  val memory = new Memory(Seq(new NESRam, ppu.cpuMemoryMapping, new APUIORegisters, if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom)))
+  val memory = new Memory(Seq(
+    new NESRam,
+    ppu.cpuMemoryMapping,
+    new APUIORegisters,
+    new ControllerRegisters(currentButtonState),
+    if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom)
+  ))
   lazy val cpu: CPU = new CPU(memory)
 
-  def tick(): Unit = {
-    val cpuCycles = cpu.tick
-    (1 to cpuCycles * 3).foreach(_ => ppu.step())
+  def tick(): Boolean = {
+    val cpuCycles = cpu.tick(true)
+    (1 to cpuCycles * 3).exists(_ => ppu.step())
   }
 }

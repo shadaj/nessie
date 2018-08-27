@@ -2,15 +2,25 @@ package me.shadaj.nessie
 
 trait MemoryProvider {
   def contains(address: Int): Boolean
+  def canReadAt(address: Int): Boolean = contains(address)
+  def canWriteAt(address: Int): Boolean = contains(address)
+
   def read(address: Int, memory: Memory): Byte
   def write(address: Int, value: Byte, memory: Memory): Unit
 }
 
 class Memory(providers: Seq[MemoryProvider]) {
-  def read(address: Int): Byte = providers.find(_.contains(address)).get.read(address, this)
+  def read(address: Int): Byte = providers.find(_.canReadAt(address)).getOrElse(
+    throw new IllegalAccessException(f"Cannot read memory at 0x$address%X")
+  ).read(address, this)
 
   def write(address: Int, value: Byte): Unit = {
-    providers.find(_.contains(address)).get.write(address, value, this)
+    providers.find(_.canWriteAt(address)) match {
+      case Some(provider) =>
+        provider.write(address, value, this)
+      case None =>
+        println(f"WARN: cannot write to address 0x$address%X, no-op")
+    }
   }
 
   def readTwoBytes(address: Int): Int = {
@@ -88,6 +98,8 @@ class APUIORegisters extends MemoryProvider {
   val memory = new Array[Byte](24)
 
   override def contains(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014
+  override def canReadAt(address: Int): Boolean = super.canReadAt(address) && address != 0x4016 && address != 0x4017
+  override def canWriteAt(address: Int): Boolean = super.canWriteAt(address) && address != 0x4016
 
   override def read(address: Int, memoryAccess: Memory): Byte = {
     memory(address - 0x4000)
@@ -96,5 +108,44 @@ class APUIORegisters extends MemoryProvider {
   override def write(address: Int, value: Byte, memoryAccess: Memory): Unit = {
     // TODO: are registers read only?
     memory(address - 0x4000) = value
+  }
+}
+
+class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends MemoryProvider {
+  private var dontIncrement = false
+  private var currentIndex = 0
+
+  override def contains(address: Int): Boolean = address == 0x4016 || address == 0x4017
+  override def canWriteAt(address: Int): Boolean = address == 0x4016
+
+  override def read(address: Int, memory: Memory): Byte = {
+    val state = currentButtonState()
+    address & 0xFF match {
+      case 0x16 =>
+        if (currentIndex >= 8) 1 else {
+          val ret: Byte = if (state(currentIndex)) {
+            1
+          } else 0
+
+          if (!dontIncrement) {
+            currentIndex += 1
+          }
+
+          ret
+        }
+      case 0x17 => 0
+    }
+  }
+
+  override def write(address: Int, value: Byte, memory: Memory): Unit = {
+    address match {
+      case 0x4016 =>
+        if (value == 1) {
+          currentIndex = 0
+          dontIncrement = true
+        } else {
+          dontIncrement = false
+        }
+    }
   }
 }

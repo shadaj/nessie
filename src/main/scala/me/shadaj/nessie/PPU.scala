@@ -17,6 +17,7 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   private var currentOamData: Vector[Byte] = Vector.fill[Byte](64 * 4)(0)
   private var currentSprites: List[Sprite] = List.empty
   private var backgroundPatternTable1 = false
+  private var spriteZeroHit = false
 
   private val nametableA = Array.fill[Byte](30, 32)(0)
   private val attributeA = Array.fill[Byte](8, 8)(0)
@@ -42,10 +43,18 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
     override def read(address: Int, memory: Memory): Byte = {
       val actualAddress = (address - 0x2000) % 8 /* mirroring! */
       actualAddress match {
-        case 0x2 => 0xff.toByte
+        case 0x2 =>
+          val vblank = currentLine >= 240
+          ((if (vblank) 1 else 0) << 7 |
+           (if (spriteZeroHit) 1 else 0) << 6).toByte
         case 0x7 =>
-          println(s"trying to read ${currentPPUAddr.right.get}")
-          0x0.toByte
+          val addr = currentPPUAddr.right.get
+          if (addr >= 0x1000 && addr < 0x2000) {
+            ppuMappedMemory.read(addr, null)
+          } else {
+            println(f"trying to read ${currentPPUAddr.right.get}%X")
+            0x0.toByte
+          }
       }
     }
 
@@ -124,26 +133,35 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   }
 
   def getSpritePixelAt(x: Int, y: Int) = {
-    currentSprites.find(_.contains(x, y)).flatMap { s =>
-      val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
-      val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
-      val relativePixelX = x - s.xPosition
-      val relativePixelY = y - s.yPosition
-
-      val paletteIndex = readPattern(
-        0x0, s.patternIndex,
-        relativePixelX, relativePixelY,
-        shouldFlipVertically, shouldFlipHorizontally
-      )
-
-      val basePaletteAddress = 0x10 + ((s.attributes % 4) << 2)
-
-      if (paletteIndex != 0) {
-        Some(nesToRGB(paletteMemory(basePaletteAddress + paletteIndex)))
-      } else {
+    def searchForSprite(list: List[Sprite], idx: Int): Option[(Int, (Int, Int, Int))] = {
+      if (list.isEmpty) {
         None
+      } else if (list.head.contains(x, y)) {
+        val s = list.head
+        val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
+        val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
+        val relativePixelX = x - s.xPosition
+        val relativePixelY = y - s.yPosition
+
+        val paletteIndex = readPattern(
+          0x0, s.patternIndex,
+          relativePixelX, relativePixelY,
+          shouldFlipVertically, shouldFlipHorizontally
+        )
+
+        val basePaletteAddress = 0x10 + ((s.attributes % 4) << 2)
+
+        if (paletteIndex != 0) {
+          Some((idx, nesToRGB(paletteMemory(basePaletteAddress + paletteIndex))))
+        } else {
+          searchForSprite(list.tail, idx + 1)
+        }
+      } else {
+        searchForSprite(list.tail, idx + 1)
       }
     }
+
+    searchForSprite(currentSprites, 0)
   }
 
   var lastFrameTime = System.currentTimeMillis()
@@ -175,13 +193,22 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   }
 
   def step(): Boolean = {
+    if (currentLine == -1 && currentX == 0) {
+      spriteZeroHit = false
+    }
+
     if (currentLine >= 0 && currentLine < 240 && currentX >= 1 && currentX <= 256) {
       val pixelX = currentX - 1
       val pixelY = currentLine
+      val spritePixel = getSpritePixelAt(pixelX, pixelY)
       val color =
-        getSpritePixelAt(pixelX, pixelY).
-          orElse(getBackgroundPixelAt(pixelX, pixelY))
+        spritePixel.map(_._2)
+          .orElse(getBackgroundPixelAt(pixelX, pixelY))
           .getOrElse(nesToRGB(universalBackgroundColor))
+
+      if (spritePixel.isDefined && spritePixel.get._1 == 0 && getBackgroundPixelAt(pixelX, pixelY).isDefined) {
+        spriteZeroHit = true
+      }
 
       currentImage(pixelY)(pixelX) = color
     }
