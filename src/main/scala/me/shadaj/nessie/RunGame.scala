@@ -46,14 +46,14 @@ object RunGame extends App {
     }
   })
 
-  val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/donkey-kong.nes")), f => {
+  val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/Super Mario Bros. (Japan, USA).nes")), f => {
     currentFrame = f
     frame.repaint()
   }, () => buttonsPressed.toVector)
 
   var previousFrame = System.currentTimeMillis()
   while (true) {
-    Thread.sleep(((previousFrame + 16) - System.currentTimeMillis()) max 0)
+    Thread.sleep(((previousFrame + 17) - System.currentTimeMillis()) max 0)
     val start = System.currentTimeMillis()
     while (!console.tick()) {}
     previousFrame = start

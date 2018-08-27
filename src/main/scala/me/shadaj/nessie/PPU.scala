@@ -3,7 +3,7 @@ package me.shadaj.nessie
 import scala.collection.mutable
 
 case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes: Int) {
-  def isVisible = yPosition < 0xEF
+  def isVisible = yPosition < 240
   def contains(x: Int, y: Int) =
     x >= xPosition && x < (xPosition + 8) && y >= yPosition && y < (yPosition + 8)
 }
@@ -19,27 +19,33 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   private var backgroundPatternTable1 = false
   private var spriteZeroHit = false
 
+  private var showBackground = false
+  private var showBackgroundLeft8 = false
+  private var showSpritesLeft8 = false
+  private var showSprites = false
+
   private val nametableA = Array.fill[Byte](30, 32)(0)
   private val attributeA = Array.fill[Byte](8, 8)(0)
 
-  var universalBackgroundColor = 0
-
   val paletteMemory = new Array[Byte](32)
+
+  def universalBackgroundColor = paletteMemory(0)
 
   def updateSprites(): Unit = {
     currentSprites = currentOamData.grouped(4).map { spriteData =>
       Sprite(
         java.lang.Byte.toUnsignedInt(spriteData.last),
-        java.lang.Byte.toUnsignedInt(spriteData.head),
+        java.lang.Byte.toUnsignedInt(spriteData.head) + 1 /* off by one? */,
         java.lang.Byte.toUnsignedInt(spriteData(1)),
         java.lang.Byte.toUnsignedInt(spriteData(2))
       )
-    }.filter(_.isVisible).toList
+    }.toList
   }
 
   val cpuMemoryMapping = new MemoryProvider {
     override def contains(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
 
+    private var vramBuffer: Byte = 0
     override def read(address: Int, memory: Memory): Byte = {
       val actualAddress = (address - 0x2000) % 8 /* mirroring! */
       actualAddress match {
@@ -49,12 +55,16 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
            (if (spriteZeroHit) 1 else 0) << 6).toByte
         case 0x7 =>
           val addr = currentPPUAddr.right.get
-          if (addr >= 0x1000 && addr < 0x2000) {
-            ppuMappedMemory.read(addr, null)
+          val ret = if (addr >= 0x1000 && addr < 0x2000) {
+            val retByte = vramBuffer
+            vramBuffer = ppuMappedMemory.read(addr, null)
+            retByte
           } else {
             println(f"trying to read ${currentPPUAddr.right.get}%X")
             0x0.toByte
           }
+          currentPPUAddr = Right(currentPPUAddr.right.get + (if (incrementAddressDown) 32 else 1)).right.map(_ % 0x4000)
+          ret
       }
     }
 
@@ -70,7 +80,10 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
             backgroundPatternTable1 = ((value >>> 4) & 1) == 1
             incrementAddressDown = ((value >>> 2) & 1) == 1
           case 0x1 =>
-
+            showBackgroundLeft8 = ((value >>> 1) & 1) == 1
+            showSpritesLeft8 = ((value >>> 2) & 1) == 1
+            showBackground = ((value >>> 3) & 1) == 1
+            showSprites = ((value >>> 4) & 1) == 1
           case 0x3 =>
             oamAddress = java.lang.Byte.toUnsignedInt(value)
 
@@ -99,10 +112,12 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
             } else if (addr >= (0x2000 + (30 * 32)) && addr < 0x2400) {
               val relative = addr - (0x2000 + (30 * 32))
               attributeA(relative / 8)(relative % 8) = value
-            } else if (addr == 0x3F00) {
-              universalBackgroundColor = value
             } else if (addr >= 0x3F00 && addr < 0x3F20) {
-              paletteMemory(addr - 0x3F00) = value
+              val relativeAddr = addr - 0x3F00
+              val mirroredPalette = if (relativeAddr % 4 == 0) {
+                relativeAddr % 0x10
+              } else relativeAddr
+              paletteMemory(mirroredPalette) = value
             } else {
               println(f"data at ${currentPPUAddr.right.get}%X = $value%X")
             }
@@ -136,7 +151,7 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
     def searchForSprite(list: List[Sprite], idx: Int): Option[(Int, (Int, Int, Int))] = {
       if (list.isEmpty) {
         None
-      } else if (list.head.contains(x, y)) {
+      } else if (list.head.isVisible && list.head.contains(x, y)) {
         val s = list.head
         val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
         val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
@@ -161,39 +176,43 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
       }
     }
 
-    searchForSprite(currentSprites, 0)
+    if (!showSprites || (!showSpritesLeft8 && x < 8)) None else {
+      searchForSprite(currentSprites, 0)
+    }
   }
 
   var lastFrameTime = System.currentTimeMillis()
 
   def getBackgroundPixelAt(x: Int, y: Int) = {
-    val tileIndexX = x / 8
-    val tileIndexY = y / 8
-    val relativePixelX = x % 8
-    val relativePixelY = y % 8
+    if (!showBackground || (!showBackgroundLeft8 && x < 8)) None else {
+      val tileIndexX = x / 8
+      val tileIndexY = y / 8
+      val relativePixelX = x % 8
+      val relativePixelY = y % 8
 
-    val patternTileNumber = java.lang.Byte.toUnsignedInt(nametableA(tileIndexY)(tileIndexX))
-    val paletteIndex = readPattern(
-      if (backgroundPatternTable1) 0x1000 else 0x0,
-      patternTileNumber,
-      relativePixelX,
-      relativePixelY
-    )
+      val patternTileNumber = java.lang.Byte.toUnsignedInt(nametableA(tileIndexY)(tileIndexX))
+      val paletteIndex = readPattern(
+        if (backgroundPatternTable1) 0x1000 else 0x0,
+        patternTileNumber,
+        relativePixelX,
+        relativePixelY
+      )
 
-    if (paletteIndex != 0) {
-      val attributeValue = attributeA(tileIndexY / 4)(tileIndexX / 4)
-      val xSide = (tileIndexX % 4) / 2
-      val ySide = (tileIndexY % 4) / 2
-      val shiftNeeded = (xSide + (ySide * 2)) * 2
-      val basePaletteAddress = (java.lang.Byte.toUnsignedInt((attributeValue >>> shiftNeeded).toByte) % 4) << 2
-      Some(nesToRGB(paletteMemory(basePaletteAddress | paletteIndex)))
-    } else {
-      None
+      if (paletteIndex != 0) {
+        val attributeValue = attributeA(tileIndexY / 4)(tileIndexX / 4)
+        val xSide = (tileIndexX % 4) / 2
+        val ySide = (tileIndexY % 4) / 2
+        val shiftNeeded = (xSide + (ySide * 2)) * 2
+        val basePaletteAddress = (java.lang.Byte.toUnsignedInt((attributeValue >>> shiftNeeded).toByte) % 4) << 2
+        Some(nesToRGB(paletteMemory(basePaletteAddress | paletteIndex)))
+      } else {
+        None
+      }
     }
   }
 
   def step(): Boolean = {
-    if (currentLine == -1 && currentX == 0) {
+    if (currentLine == -1 && currentX == 1) {
       spriteZeroHit = false
     }
 
@@ -206,8 +225,10 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
           .orElse(getBackgroundPixelAt(pixelX, pixelY))
           .getOrElse(nesToRGB(universalBackgroundColor))
 
-      if (spritePixel.isDefined && spritePixel.get._1 == 0 && getBackgroundPixelAt(pixelX, pixelY).isDefined) {
-        spriteZeroHit = true
+      if (spritePixel.isDefined && spritePixel.get._1 == 0 && pixelX != 255) {
+        if (getBackgroundPixelAt(pixelX, pixelY).isDefined) {
+          spriteZeroHit = true
+        }
       }
 
       currentImage(pixelY)(pixelX) = color

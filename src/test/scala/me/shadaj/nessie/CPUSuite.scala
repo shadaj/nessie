@@ -31,6 +31,7 @@ class CPUSuite extends FunSuite {
     val expectedLines = Source.fromFile("test-roms/nestest.log").getLines()
 
     var stopRunning = false
+    var ticks = 0
     while (!stopRunning) {
       val currentLogLine = expectedLines.next()
       val split = currentLogLine.split(' ').filterNot(_.isEmpty)
@@ -42,16 +43,20 @@ class CPUSuite extends FunSuite {
         assert(java.lang.Byte.toUnsignedInt(cpu.xRegister) == Integer.parseInt(split.find(_.startsWith("X:")).get.drop(2), 16))
         assert(java.lang.Byte.toUnsignedInt(cpu.yRegister) == Integer.parseInt(split.find(_.startsWith("Y:")).get.drop(2), 16))
         assert(java.lang.Byte.toUnsignedInt(cpu.stackPointer) == Integer.parseInt(split.find(_.startsWith("SP:")).get.drop(3), 16))
-        cpu.tick
+
+//        assert((ticks * 3 % 341) == split.last.split(':').last.toInt)
+
+        ticks += cpu.tick(true)
       }
     }
   }
 
   def runTestROM(file: NESFile) = {
     var isDone = false
+    var success = false
+    var message = ""
 
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new APUIORegisters,
-      if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom),
+    val console = new Console(file, _ => {}, () => Seq.fill(5)(false), Seq(
       new MemoryProvider { // test ROMs write the result text here
       private val stringMemory = new Array[Byte](256)
       override def contains(address: Int): Boolean = address >= 0x6000
@@ -63,18 +68,20 @@ class CPUSuite extends FunSuite {
           stringMemory(address - 0x6004) = value
         }
 
-        if (address == 0x6000 && value == 0) {
-          println(Iterator.from(0).map(stringMemory.apply).takeWhile(_ != 0).map(_.toChar).mkString)
+        if (address == 0x6000 && value != -128) {
+          message = Iterator.from(0).map(stringMemory.apply).takeWhile(_ != 0).map(_.toChar).mkString
           isDone = true
+          success = value == 0
         }
       }
     }))
 
-    val cpu = new CPU(memory)
-
     while (!isDone) {
-      cpu.tick
+      console.tick()
     }
+
+    println(message)
+    assert(success)
   }
 
   test("Can run 01-basics test ROM") {
@@ -87,5 +94,29 @@ class CPUSuite extends FunSuite {
 
   test("Can run official_only test ROM") {
     runTestROM(NESFile.fromFile(new File("test-roms/official_only.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/01-basics test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/01-basics.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/02-alignment test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/02-alignment.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/03-corners test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/03-corners.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/04-flip test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/04-flip.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/05-left_clip test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/05-left_clip.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/06-right_edge test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/06-right_edge.nes")))
   }
 }

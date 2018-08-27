@@ -112,7 +112,7 @@ class APUIORegisters extends MemoryProvider {
 }
 
 class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends MemoryProvider {
-  private var dontIncrement = false
+  private var incrementIndex = false
   private var currentIndex = 0
 
   override def contains(address: Int): Boolean = address == 0x4016 || address == 0x4017
@@ -127,7 +127,7 @@ class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends Memory
             1
           } else 0
 
-          if (!dontIncrement) {
+          if (incrementIndex) {
             currentIndex += 1
           }
 
@@ -142,9 +142,9 @@ class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends Memory
       case 0x4016 =>
         if (value == 1) {
           currentIndex = 0
-          dontIncrement = true
+          incrementIndex = false
         } else {
-          dontIncrement = false
+          incrementIndex = true
         }
     }
   }
