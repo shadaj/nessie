@@ -2,9 +2,24 @@ package me.shadaj.nessie
 
 import java.lang.Byte.toUnsignedInt
 
-trait Address extends Arg
+trait Readable extends Arg {
+  def getValue(cpu: CPU, memory: Memory): Byte
+}
 
-case class Immediate(constant: Byte) extends Address {
+trait Writable extends Arg {
+  def writeValue(cpu: CPU, memory: Memory, value: Byte): Unit
+}
+
+trait Address extends Arg with Readable with Writable {
+  val address: Int
+  override def getValue(cpu: CPU, memory: Memory): Byte = memory.read(address)
+  override def writeValue(cpu: CPU, memory: Memory, value: Byte): Unit = {
+    memory.write(address, value)
+  }
+}
+
+case class Immediate(constant: Byte) extends Readable {
+  override def getValue(cpu: CPU, memory: Memory): Byte = constant
   override def toString: String = f"#${"$"}$constant%x | #$constant"
 }
 
@@ -175,7 +190,8 @@ object IndirectX {
   }
 }
 
-case class Relative(relativeAddress: Byte) extends Address {
+case class Relative(originalAddress: Int, relativeAddress: Byte) extends Address {
+  override val address: Int = originalAddress + relativeAddress
   override def toString: String = s"*${if (relativeAddress >= 0) "+" else ""}$relativeAddress"
 }
 
@@ -184,9 +200,32 @@ object Relative {
     override val size: Int = 1
 
     override def parse(getArg: Int => Byte, cpu: CPU): Relative = {
-      Relative(getArg(0))
+      Relative(cpu.programCounter, getArg(0))
     }
   }
 }
 
-case object Accumulator extends Address
+case class Accumulator() extends Arg with Readable with Writable {
+  override def getValue(cpu: CPU, memory: Memory): Byte = cpu.accumulator
+  override def writeValue(cpu: CPU, memory: Memory, value: Byte): Unit = cpu.accumulator = value
+}
+
+object Accumulator {
+  implicit val argParser: ArgParser[Accumulator] = new ArgParser[Accumulator] {
+    override val size: Int = 0
+
+    override def parse(getArg: Int => Byte, cpu: CPU): Accumulator = Accumulator()
+  }
+}
+
+case class NoArgs() extends Arg {
+  override def toString: String = ""
+}
+
+object NoArgs {
+  implicit val argParser: ArgParser[NoArgs] = new ArgParser[NoArgs] {
+    override val size: Int = 0
+
+    override def parse(getArg: Int => Byte, cpu: CPU): NoArgs = NoArgs()
+  }
+}

@@ -48,7 +48,8 @@ class CPU(val memory: Memory) {
       7
     }.getOrElse(0)
 
-    val currentInstruction = Instruction.cpuInstructions.getOrElse(memory.read(programCounter), {
+    val instructionOpcode = memory.read(programCounter)
+    val (currentInstruction, parser) = Instruction.cpuInstructions.getOrElse(instructionOpcode, {
       throw new IllegalArgumentException(s"Unknown instruction: ${memory.read(programCounter).formatted("0x%x")}")
     })
 
@@ -56,8 +57,8 @@ class CPU(val memory: Memory) {
     if (log) {
       print(programCounter.formatted("%x").toUpperCase + " ")
     }
-    programCounter += currentInstruction.argsSize + 1
-    handleInterruptCycles + currentInstruction.run(i => memory.read(currentCounter + 1 + i), log)(this)
+    programCounter += parser.size + 1
+    handleInterruptCycles + currentInstruction.run(instructionOpcode, i => memory.read(currentCounter + 1 + i), log)(this)
   }
 
   def tick: Int = tick(false)

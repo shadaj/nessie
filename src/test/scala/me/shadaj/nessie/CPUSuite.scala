@@ -35,19 +35,16 @@ class CPUSuite extends FunSuite {
     while (!stopRunning) {
       val currentLogLine = expectedLines.next()
       val split = currentLogLine.split(' ').filterNot(_.isEmpty)
-      if (cpu.memory.read(cpu.programCounter) == 0x04) {
-        stopRunning = true
-      } else {
-        assert(cpu.programCounter == Integer.parseInt(split.head, 16))
-        assert(java.lang.Byte.toUnsignedInt(cpu.accumulator) == Integer.parseInt(split.find(_.startsWith("A:")).get.drop(2), 16))
-        assert(java.lang.Byte.toUnsignedInt(cpu.xRegister) == Integer.parseInt(split.find(_.startsWith("X:")).get.drop(2), 16))
-        assert(java.lang.Byte.toUnsignedInt(cpu.yRegister) == Integer.parseInt(split.find(_.startsWith("Y:")).get.drop(2), 16))
-        assert(java.lang.Byte.toUnsignedInt(cpu.stackPointer) == Integer.parseInt(split.find(_.startsWith("SP:")).get.drop(3), 16))
 
-//        assert((ticks * 3 % 341) == split.last.split(':').last.toInt)
+      assert(cpu.programCounter == Integer.parseInt(split.head, 16))
+      assert(java.lang.Byte.toUnsignedInt(cpu.accumulator) == Integer.parseInt(split.find(_.startsWith("A:")).get.drop(2), 16))
+      assert(java.lang.Byte.toUnsignedInt(cpu.xRegister) == Integer.parseInt(split.find(_.startsWith("X:")).get.drop(2), 16))
+      assert(java.lang.Byte.toUnsignedInt(cpu.yRegister) == Integer.parseInt(split.find(_.startsWith("Y:")).get.drop(2), 16))
+      assert(java.lang.Byte.toUnsignedInt(cpu.stackPointer) == Integer.parseInt(split.find(_.startsWith("SP:")).get.drop(3), 16))
 
-        ticks += cpu.tick(true)
-      }
+      assert((ticks * 3 % 341) == split.last.split(':').last.toInt)
+
+      ticks += cpu.tick(true)
     }
   }
 
@@ -118,5 +115,9 @@ class CPUSuite extends FunSuite {
 
   test("Can run ppu_sprite_hit/06-right_edge test ROM") {
     runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/06-right_edge.nes")))
+  }
+
+  test("Can run ppu_sprite_hit/07-screen_bottom test ROM") {
+    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/07-screen_bottom.nes")))
   }
 }

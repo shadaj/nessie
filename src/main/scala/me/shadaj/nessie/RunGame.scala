@@ -46,7 +46,7 @@ object RunGame extends App {
     }
   })
 
-  val console = new Console(NESFile.fromFile(new File("/Users/shadaj/Downloads/Super Mario Bros. (Japan, USA).nes")), f => {
+  val console = new Console(NESFile.fromFile(new File("test-roms/nestest.nes")), f => {
     currentFrame = f
     frame.repaint()
   }, () => buttonsPressed.toVector)

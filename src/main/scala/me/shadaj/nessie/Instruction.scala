@@ -14,39 +14,56 @@ trait ArgParser[A <: Arg] {
 }
 
 trait ArgsParser[Args <: HList] {
-  val size: Int
-  def parse(getArg: Int => Byte, cpu: CPU): Args
+  val parsers: Seq[ArgParser[_]]
 }
 
 object ArgsParser {
   implicit val forNil: ArgsParser[HNil] = new ArgsParser[HNil] {
-    override val size: Int = 0
-    override def parse(getArg: Int => Byte, cpu: CPU): HNil = HNil
+    override val parsers: Seq[ArgParser[_]] = Seq.empty
   }
 
   implicit def forCons[Head <: Arg, Tail <: HList](implicit argParser: ArgParser[Head], tailParser: ArgsParser[Tail]): ArgsParser[Head :: Tail] = new ArgsParser[Head :: Tail] {
-    override val size: Int = argParser.size + tailParser.size
-    override def parse(getArg: Int => Byte, cpu: CPU): Head :: Tail = {
-      argParser.parse(getArg, cpu) :: tailParser.parse(i => getArg(i + argParser.size), cpu)
-    }
+    val parsers = argParser +: tailParser.parsers
   }
 }
 
-case class Instruction[Args <: HList](opcode: Int, name: String)(execute: (Args, CPU) => Int)(implicit parseArgs: ArgsParser[Args], argsToList: ToList[Args, Arg]) {
-  val argsSize = parseArgs.size
-  def parseArgs(argsBytes: Seq[Byte], cpu: CPU): List[Arg] = parseArgs.parse(argsBytes, cpu).toList
-  def run(getArg: Int => Byte, log: Boolean = false)(cpu: CPU) = {
-    val parsedArgs = parseArgs.parse(getArg, cpu)
+case class Instruction[Args <: HList, LubA](name: String, opcodes: Seq[Int]*)
+                                           (execute: (LubA, CPU) => Int)
+                                           (implicit parseArgs: ArgsParser[Args]) {
+  if (opcodes.size != parseArgs.parsers.size) {
+    throw new IllegalArgumentException("Opcodes and parsers must be the same size")
+  }
+
+  val opcodesToArgs = opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2.asInstanceOf[ArgParser[Nothing]]))
+    .asInstanceOf[Seq[(Byte, ArgParser[Nothing])]].toMap
+
+  def run(opcode: Byte, getArg: Int => Byte, log: Boolean = false)(cpu: CPU) = {
+    val parsedArg = opcodesToArgs(opcode).parse(getArg, cpu).asInstanceOf[LubA]
     if (log) {
-      println(s"$this ${parsedArgs.toList.mkString(" ")}")
+      println(s"$this $parsedArg")
     }
-    execute(parsedArgs, cpu)
+    execute(parsedArg, cpu)
   }
 
   override def toString: String = name
 }
 
+class SeparateApply
+object SeparateApply {
+  implicit val imp = new SeparateApply
+}
+
 object Instruction {
+  def apply[Args <: HList, LubA](name: String, opcodes: Int*)
+                                (execute: (LubA, CPU) => Int)
+                                (implicit parseArgs: ArgsParser[Args], separate: SeparateApply): Instruction[Args, LubA] = {
+    apply[Args, LubA](name, opcodes.map(Seq(_)): _*)(execute)(parseArgs)
+  }
+
+  def pageCrossExtra(original: Int, shifted: Int) = {
+    if ((original & 0xFF00) != (shifted & 0xFF00)) 1 else 0
+  }
+
   def setZeroNeg(value: Byte, cpu: CPU) = {
     cpu.zeroFlag = value == 0
     cpu.negativeFlag = value < 0
@@ -73,17 +90,11 @@ object Instruction {
                               absoluteX: Int,
                               absoluteY: Int,
                               indirectX: Int,
-                              indirectY: Int)(process: (Byte, Address, CPU) => Int): Seq[Instruction[_ <: HList]] = {
+                              indirectY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     generateNonIndirectXAddressTypes(name)(
       immediate, zeroPage, zeroPageX, absolute, absoluteX
     )(process) ++ Seq(
-      Instruction[AbsoluteY :: HNil](absoluteY, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      },
-      Instruction[IndirectX :: HNil](indirectX, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      },
-      Instruction[IndirectIndexed :: HNil](indirectY, name) { case (addr :: HNil, cpu) =>
+      Instruction[AbsoluteY :: IndirectX :: IndirectIndexed :: HNil, Address](name, absoluteY, indirectX, indirectY) { (addr, cpu) =>
         process(cpu.memory.read(addr.address), addr, cpu)
       }
     )
@@ -94,12 +105,9 @@ object Instruction {
                               zeroPage: Int,
                               zeroPageX: Int,
                               absolute: Int,
-                              absoluteX: Int)(process: (Byte, Address, CPU) => Int): Seq[Instruction[_ <: HList]] = {
+                              absoluteX: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     generateNonIndirectNoRegisterTypes(name)(immediate, zeroPage, absolute)(process) ++ Seq(
-      Instruction[ZeroPageX :: HNil](zeroPageX, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      },
-      Instruction[AbsoluteX :: HNil](absoluteX, name) { case (addr :: HNil, cpu) =>
+      Instruction[ZeroPageX :: AbsoluteX :: HNil, Address](name, zeroPageX, absoluteX) { (addr, cpu) =>
         process(cpu.memory.read(addr.address), addr, cpu)
       }
     )
@@ -110,12 +118,9 @@ object Instruction {
                                        zeroPage: Int,
                                        zeroPageY: Int,
                                        absolute: Int,
-                                       absoluteY: Int)(process: (Byte, Address, CPU) => Int): Seq[Instruction[_ <: HList]] = {
+                                       absoluteY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     generateNonIndirectNoRegisterTypes(name)(immediate, zeroPage, absolute)(process) ++ Seq(
-      Instruction[ZeroPageY :: HNil](zeroPageY, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      },
-      Instruction[AbsoluteY :: HNil](absoluteY, name) { case (addr :: HNil, cpu) =>
+      Instruction[ZeroPageY :: AbsoluteY :: HNil, Address](name, zeroPageY, absoluteY) { (addr, cpu) =>
         process(cpu.memory.read(addr.address), addr, cpu)
       }
     )
@@ -124,16 +129,10 @@ object Instruction {
   def generateNonIndirectNoRegisterTypes(name: String)
                                         (immediate: Int,
                                          zeroPage: Int,
-                                         absolute: Int)(process: (Byte, Address, CPU) => Int): Seq[Instruction[_ <: HList]] = {
+                                         absolute: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     Seq(
-      Instruction[Immediate :: HNil](immediate, name) { case (addr :: HNil, cpu) =>
-        process(addr.constant, addr, cpu)
-      },
-      Instruction[ZeroPage :: HNil](zeroPage, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      },
-      Instruction[Absolute :: HNil](absolute, name) { case (addr :: HNil, cpu) =>
-        process(cpu.memory.read(addr.twoBytes), addr, cpu)
+      Instruction[Immediate :: ZeroPage :: Absolute :: HNil, Readable](name, immediate, zeroPage, absolute) { (addr, cpu) =>
+        process(addr.getValue(cpu, cpu.memory), addr, cpu)
       }
     )
   }
@@ -143,12 +142,12 @@ object Instruction {
                           zeroPage: Int,
                           zeroPageX: Int,
                           absolute: Int,
-                          absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList]] = {
+                          absoluteX: Int)(process: (Byte, Readable, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     generateMemoryModifyTypes(name)(zeroPage, zeroPageX, absolute, absoluteX)(process) ++ Seq(
-      Instruction[HNil](accumulator, name) { (_, cpu) =>
-        val value = cpu.accumulator
-        val (ret, cycles) = process(value, Accumulator, cpu)
-        cpu.accumulator = ret
+      Instruction[Accumulator :: HNil, Readable with Writable](name, accumulator) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val (ret, cycles) = process(value, addr, cpu)
+        addr.writeValue(cpu, cpu.memory, ret)
         cycles
       }
     )
@@ -158,30 +157,13 @@ object Instruction {
                          (zeroPage: Int,
                           zeroPageX: Int,
                           absolute: Int,
-                          absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList]] = {
+                          absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     Seq(
-      Instruction[ZeroPage :: HNil](zeroPage, name) { case (addr :: HNil, cpu) =>
-        val value = cpu.memory.read(addr.address)
+      Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]
+                 (name, zeroPage, zeroPageX, absolute, absoluteX) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
         val (ret, cycles) = process(value, addr, cpu)
-        cpu.memory.write(addr.address, ret)
-        cycles
-      },
-      Instruction[ZeroPageX :: HNil](zeroPageX, name) { case (addr :: HNil, cpu) =>
-        val value = cpu.memory.read(addr.address)
-        val (ret, cycles) = process(value, addr, cpu)
-        cpu.memory.write(addr.address, ret)
-        cycles
-      },
-      Instruction[Absolute :: HNil](absolute, name) { case (addr :: HNil, cpu) =>
-        val value = cpu.memory.read(addr.address)
-        val (ret, cycles) = process(value, addr, cpu)
-        cpu.memory.write(addr.address, ret)
-        cycles
-      },
-      Instruction[AbsoluteX :: HNil](absoluteX, name) { case (addr :: HNil, cpu) =>
-        val value = cpu.memory.read(addr.address)
-        val (ret, cycles) = process(value, addr, cpu)
-        cpu.memory.write(addr.address, ret)
+        addr.writeValue(cpu, cpu.memory, ret)
         cycles
       }
     )
@@ -195,7 +177,7 @@ object Instruction {
     }
   }
 
-  val cpuInstructionsList: Seq[Instruction[_ <: HList]] =
+  val cpuInstructionsList: Seq[Instruction[_ <: HList, _ <: Arg]] =
     BranchInstructions.branchInstructions ++
     StoreInstructions.storeInstructions ++
     LoadInstructions.loadInstructions ++
@@ -284,7 +266,7 @@ object Instruction {
       val sum = toUnsignedInt(originalAccumulator) + toUnsignedInt(value) + (if (cpu.carryFlag) 1 else 0)
       cpu.accumulator = sum.toByte
       setZeroNeg(cpu.accumulator, cpu)
-      cpu.carryFlag = (sum >> 8) != 0
+      cpu.carryFlag = (sum & 0x100) != 0
       cpu.overflowFlag = (originalAccumulator >= 0 && value >= 0 && cpu.accumulator < 0) ||
         (originalAccumulator < 0 && value < 0 && cpu.accumulator >= 0)
       addr match {
@@ -308,9 +290,9 @@ object Instruction {
       0xC1,
       0xD1
     ) { (value, addr, cpu) =>
-      cpu.carryFlag = toUnsignedInt(cpu.accumulator) >= toUnsignedInt(value)
-      cpu.zeroFlag = toUnsignedInt(cpu.accumulator) == toUnsignedInt(value)
-      cpu.negativeFlag = processNegativeFlag(cpu.accumulator, value <= 0) < value
+      val result = toUnsignedInt(cpu.accumulator) - toUnsignedInt(value)
+      cpu.carryFlag = (result & 0x100) == 0
+      setZeroNeg(result.toByte, cpu)
 
       addr match {
         case _: Immediate => 2
@@ -361,7 +343,7 @@ object Instruction {
       setZeroNeg(shifted, cpu)
 
       addr match {
-        case Accumulator => (shifted, 2)
+        case _: Accumulator => (shifted, 2)
         case _: ZeroPage => (shifted, 5)
         case _: ZeroPageX => (shifted, 6)
         case _: Absolute => (shifted, 6)
@@ -375,7 +357,7 @@ object Instruction {
       setZeroNeg(shifted, cpu)
 
       addr match {
-        case Accumulator => (shifted, 2)
+        case _: Accumulator => (shifted, 2)
         case _: ZeroPage => (shifted, 5)
         case _: ZeroPageX => (shifted, 6)
         case _: Absolute => (shifted, 6)
@@ -390,7 +372,7 @@ object Instruction {
       setZeroNeg(rotated, cpu)
 
       addr match {
-        case Accumulator => (rotated, 2)
+        case _: Accumulator => (rotated, 2)
         case _: ZeroPage => (rotated, 5)
         case _: ZeroPageX => (rotated, 6)
         case _: Absolute => (rotated, 6)
@@ -406,7 +388,7 @@ object Instruction {
       setZeroNeg(rotated, cpu)
 
       addr match {
-        case Accumulator => (rotated, 2)
+        case _: Accumulator => (rotated, 2)
         case _: ZeroPage => (rotated, 5)
         case _: ZeroPageX => (rotated, 6)
         case _: Absolute => (rotated, 6)
@@ -436,126 +418,115 @@ object Instruction {
         case _: Absolute => (deced, 6)
         case _: AbsoluteX => (deced, 7)
       }
-    } ++ Seq(
-      Instruction[ZeroPage :: HNil](0x24, "BIT") { case (addr :: HNil, cpu) =>
+    } ++ Seq[Instruction[_ <: HList, _ <: Arg]](
+      Instruction[ZeroPage :: Absolute :: HNil, Address]("BIT", 0x24, 0x2C) { (addr, cpu) =>
         val memoryValue = cpu.memory.read(addr.address)
         val masked = toUnsignedInt(memoryValue) & toUnsignedInt(cpu.accumulator)
         cpu.zeroFlag = masked == 0
-        cpu.overflowFlag = (memoryValue << 1).toByte < 0
+        cpu.overflowFlag = (memoryValue & 0x40) != 0
         cpu.negativeFlag = memoryValue < 0
-        4
+
+        addr match {
+          case _: ZeroPage => 3
+          case _: Absolute => 4
+        }
       },
 
-      Instruction[Absolute :: HNil](0x2C, "BIT") { case (Absolute(addr) :: HNil, cpu) =>
-        val memoryValue = cpu.memory.read(addr)
-        val masked = toUnsignedInt(memoryValue) & toUnsignedInt(cpu.accumulator)
-        cpu.zeroFlag = masked == 0
-        cpu.overflowFlag = (memoryValue << 1).toByte < 0 // TODO check this logic
-        cpu.negativeFlag = memoryValue < 0
-        4
-      },
-
-      Instruction[HNil](0x18, "CLC") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("CLC", 0x18) { (_, cpu) =>
         cpu.carryFlag = false
         2
       },
 
-      Instruction[HNil](0xD8, "CLD") { case (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("CLD", 0xD8) { case (_, cpu) =>
         cpu.decimalMode = false
         2
       },
 
-      Instruction[HNil](0x58, "CLI") { case (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("CLI", 0x58) { case (_, cpu) =>
         cpu.interruptDisable = false
         2
       },
 
-      Instruction[HNil](0xB8, "CLV") { case (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("CLV", 0xB8) { case (_, cpu) =>
         cpu.overflowFlag = false
         2
       },
 
-      Instruction[HNil](0xCA, "DEX") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("DEX", 0xCA) { (_, cpu) =>
         cpu.xRegister = (cpu.xRegister - 1).toByte
         cpu.zeroFlag = cpu.xRegister == 0
         cpu.negativeFlag = cpu.xRegister < 0
         2
       },
 
-      Instruction[HNil](0x88, "DEY") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("DEY", 0x88) { (_, cpu) =>
         cpu.yRegister = (cpu.yRegister - 1).toByte
         cpu.zeroFlag = cpu.yRegister == 0
         cpu.negativeFlag = cpu.yRegister < 0
         2
       },
 
-      Instruction[HNil](0xE8, "INX") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("INX", 0xE8) { (_, cpu) =>
         cpu.xRegister = (cpu.xRegister + 1).toByte
         cpu.zeroFlag = cpu.xRegister == 0
         cpu.negativeFlag = cpu.xRegister < 0
         2
       },
 
-      Instruction[HNil](0xC8, "INY") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("INY", 0xC8) { (_, cpu) =>
         cpu.yRegister = (cpu.yRegister + 1).toByte
         cpu.zeroFlag = cpu.yRegister == 0
         cpu.negativeFlag = cpu.yRegister < 0
         2
       },
 
-      Instruction[Absolute :: HNil](0x4C, "JMP") { case (Absolute(address) :: HNil, cpu) =>
-        cpu.programCounter = address
-        3
-      },
-      Instruction[Indirect :: HNil](0x6C, "JMP") { case (addr :: HNil, cpu) =>
+      Instruction[Absolute :: Indirect :: HNil, Address]("JMP", 0x4C, 0x6C) { (addr, cpu) =>
         cpu.programCounter = addr.address
-        5
+
+        addr match {
+          case _: Absolute => 3
+          case _: Indirect => 5
+        }
       },
 
-      Instruction[Absolute :: HNil](0x20, "JSR") { case (Absolute(address) :: HNil, cpu) =>
+      Instruction[Absolute :: HNil, Absolute]("JSR", 0x20) { (addr, cpu) =>
         val addressToPush = cpu.programCounter - 1 // already incremented by CPU
         pushToStack((addressToPush >> 8).toByte, cpu)
         pushToStack((addressToPush & 0xFF).toByte, cpu)
 
-        cpu.programCounter = address
+        cpu.programCounter = addr.address
 
         6
       },
 
-      Instruction[HNil](0x1A, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0x3A, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0x5A, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0x7A, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0xDA, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0xEA, "NOP") { (_, _) =>
-        2
-      },
-      Instruction[HNil](0xFA, "NOP") { (_, _) =>
-        2
+      Instruction[Immediate :: Absolute :: IndirectX :: Relative :: NoArgs :: HNil, Arg]("NOP",
+        Seq(0x04, 0x44, 0x64),
+        Seq(0x0C),
+        Seq(0x14, 0x34, 0x54, 0x74, 0xD4, 0xF4),
+        Seq(0x80),
+        Seq(0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xEA, 0xFA)
+      ) { (addr, _) =>
+        addr match {
+          case _: Immediate => 3
+          case _: Absolute => 4
+          case _: IndirectX => 4
+          case _: Relative => 2
+          case _: NoArgs => 2
+        }
       },
 
-      Instruction[HNil](0x48, "PHA") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("PHA", 0x48) { (_, cpu) =>
         pushToStack(cpu.accumulator, cpu)
         3
       },
 
-      Instruction[HNil](0x08, "PHP") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("PHP", 0x08) { (_, cpu) =>
         pushToStack(cpu.statusRegister, cpu)
 
         3
       },
 
-      Instruction[HNil](0x28, "PLP") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("PLP", 0x28) { (_, cpu) =>
         val stackValue = toUnsignedInt(popFromStack(cpu))
 
         def atIndex(index: Int): Boolean = {
@@ -572,13 +543,13 @@ object Instruction {
         4
       },
 
-      Instruction[HNil](0x68, "PLA") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("PLA", 0x68) { (_, cpu) =>
         cpu.accumulator = popFromStack(cpu)
         setZeroNeg(cpu.accumulator, cpu)
         4
       },
 
-      Instruction[HNil](0x60, "RTS") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("RTS", 0x60) { (_, cpu) =>
         val lowerByte = popFromStack(cpu)
         val upperByte = popFromStack(cpu)
 
@@ -587,7 +558,7 @@ object Instruction {
         6
       },
 
-      Instruction[HNil](0x40, "RTI") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("RTI", 0x40) { (_, cpu) =>
         val stackValue = toUnsignedInt(popFromStack(cpu)) // pop cpu status
         def atIndex(index: Int): Boolean = {
           ((stackValue >> index) & 1) == 1
@@ -608,22 +579,22 @@ object Instruction {
         6
       },
 
-      Instruction[HNil](0x38, "SEC") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("SEC", 0x38) { (_, cpu) =>
         cpu.carryFlag = true
         2
       },
 
-      Instruction[HNil](0xF8, "SED") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("SED", 0xF8) { (_, cpu) =>
         cpu.decimalMode = true
         2
       },
 
-      Instruction[HNil](0x78, "SEI") { (_, cpu) =>
+      Instruction[NoArgs :: HNil, Arg]("SEI", 0x78) { (_, cpu) =>
         cpu.interruptDisable = true
         2
       }
     )
 
-  val cpuInstructions = cpuInstructionsList.map(i => i.opcode.toByte -> i)
-    .asInstanceOf[Seq[(Byte, Instruction[Nothing])]].toMap
+  val cpuInstructions = cpuInstructionsList.flatMap(i => i.opcodesToArgs.map(a => a._1 -> (i -> a._2)))
+    .asInstanceOf[Seq[(Byte, (Instruction[Nothing, Nothing], ArgParser[Nothing]))]].toMap
 }

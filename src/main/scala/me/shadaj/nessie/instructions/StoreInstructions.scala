@@ -5,59 +5,39 @@ import shapeless._
 
 object StoreInstructions {
   val storeInstructions = Seq(
-    Instruction[ZeroPage :: HNil](0x85, "STA") { case (ad :: HNil, cpu) =>
+    Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: AbsoluteY :: IndirectX :: IndirectIndexed :: HNil, Address]("STA",
+      0x85, 0x95, 0x8D, 0x9D, 0x99, 0x81, 0x91) { (ad, cpu) =>
       cpu.memory.write(ad.address, cpu.accumulator)
-      3
-    },
-    Instruction[ZeroPageX :: HNil](0x95, "STA") { case (ad :: HNil, cpu) =>
-      cpu.memory.write(ad.address, cpu.accumulator)
-      4
-    },
-    Instruction[Absolute :: HNil](0x8D, "STA") { case (ad :: HNil, cpu) =>
-      cpu.memory.write(ad.twoBytes, cpu.accumulator)
-      4
-    },
-    Instruction[AbsoluteX :: HNil](0x9D, "STA") { case (ad :: HNil, cpu) =>
-      cpu.memory.write(ad.address, cpu.accumulator)
-      5
-    },
-    Instruction[AbsoluteY :: HNil](0x99, "STA") { case (ad :: HNil, cpu) =>
-      cpu.memory.write(ad.address, cpu.accumulator)
-      5
-    },
-    Instruction[IndirectX:: HNil](0x81, "STA") { case (ind :: HNil, cpu) =>
-      cpu.memory.write(ind.address, cpu.accumulator)
-      6
-    },
-    Instruction[IndirectIndexed :: HNil](0x91, "STA") { case (ind :: HNil, cpu) =>
-      cpu.memory.write(ind.address, cpu.accumulator)
-      6
+
+      ad match {
+        case _: ZeroPage => 3
+        case _: ZeroPageX => 4
+        case _: Absolute => 4
+        case _: AbsoluteX => 5
+        case _: AbsoluteY => 5
+        case _: IndirectX => 6
+        case _: IndirectIndexed => 6
+      }
     },
 
-    Instruction[ZeroPage :: HNil](0x86, "STX") { case (ZeroPage(address) :: HNil, cpu) =>
-      cpu.memory.write(address, cpu.xRegister)
-      3
-    },
-    Instruction[ZeroPageY :: HNil](0x96, "STX") { case (addr :: HNil, cpu) =>
+    Instruction[ZeroPage :: ZeroPageY :: Absolute :: HNil, Address]("STX", 0x86, 0x96, 0x8E) { (addr, cpu) =>
       cpu.memory.write(addr.address, cpu.xRegister)
-      3
-    },
-    Instruction[Absolute :: HNil](0x8E, "STX") { case (Absolute(address) :: HNil, cpu) =>
-      cpu.memory.write(address, cpu.xRegister)
-      4
+
+      addr match {
+        case _: ZeroPage => 3
+        case _: ZeroPageY => 4
+        case _: Absolute => 4
+      }
     },
 
-    Instruction[ZeroPage :: HNil](0x84, "STY") { case (addr :: HNil, cpu) =>
+    Instruction[ZeroPage :: ZeroPageX :: Absolute :: HNil, Address]("STY", 0x84, 0x94, 0x8C) { (addr, cpu) =>
       cpu.memory.write(addr.address, cpu.yRegister)
-      3
-    },
-    Instruction[ZeroPageX :: HNil](0x94, "STY") { case (addr :: HNil, cpu) =>
-      cpu.memory.write(addr.address, cpu.yRegister)
-      4
-    },
-    Instruction[Absolute :: HNil](0x8C, "STY") { case (addr :: HNil, cpu) =>
-      cpu.memory.write(addr.address, cpu.yRegister)
-      4
+
+      addr match {
+        case _: ZeroPage => 3
+        case _: ZeroPageX => 4
+        case _: Absolute => 4
+      }
     }
   )
 }

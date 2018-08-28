@@ -16,10 +16,10 @@ object LoadInstructions {
       case _: ZeroPage => 3
       case _: ZeroPageX => 4
       case _: Absolute => 4
-      case _: AbsoluteX => 4 // TODO: page cross
-      case _: AbsoluteY => 4
+      case a: AbsoluteX => 4 + Instruction.pageCrossExtra(a.absolute, a.address)
+      case a: AbsoluteY => 4 + Instruction.pageCrossExtra(a.absolute, a.address)
       case _: IndirectX => 6
-      case _: IndirectIndexed => 5
+      case a: IndirectIndexed => 5 + Instruction.pageCrossExtra(a.indirect, a.address)
     }
   }} ++ Instruction.generateNonIndirectYAddressTypes("LDX")(
     0xA2, 0xA6, 0xB6, 0xAE, 0xBE
@@ -32,7 +32,7 @@ object LoadInstructions {
       case _: ZeroPage => 3
       case _: ZeroPageY => 4
       case _: Absolute => 4
-      case _: AbsoluteY => 4 // TODO: page cross
+      case a: AbsoluteY => 4 + Instruction.pageCrossExtra(a.absolute, a.address)
     }
   } ++ Instruction.generateNonIndirectXAddressTypes("LDY")(
     0xA0, 0xA4, 0xB4, 0xAC, 0xBC
@@ -45,7 +45,7 @@ object LoadInstructions {
       case _: ZeroPage => 3
       case _: ZeroPageX => 4
       case _: Absolute => 4
-      case _: AbsoluteX => 4 // TODO: page cross
+      case a: AbsoluteX => 4 + Instruction.pageCrossExtra(a.absolute, a.address)
     }
   }
 }
