@@ -262,13 +262,15 @@ object Instruction {
       0x61,
       0x71
     ) { (value, addr, cpu) =>
-      val originalAccumulator = cpu.accumulator
-      val sum = toUnsignedInt(originalAccumulator) + toUnsignedInt(value) + (if (cpu.carryFlag) 1 else 0)
+      val toAdd = toUnsignedInt(value)
+      val sum = toUnsignedInt(cpu.accumulator) + toAdd + (if (cpu.carryFlag) 1 else 0)
+
+      cpu.carryFlag = (sum & 0x100) != 0
+      cpu.overflowFlag = (((cpu.accumulator ^ toAdd) & 0x80) != 0) && (((cpu.accumulator ^ sum) & 0x80) == 0x80)
+
       cpu.accumulator = sum.toByte
       setZeroNeg(cpu.accumulator, cpu)
-      cpu.carryFlag = (sum & 0x100) != 0
-      cpu.overflowFlag = (originalAccumulator >= 0 && value >= 0 && cpu.accumulator < 0) ||
-        (originalAccumulator < 0 && value < 0 && cpu.accumulator >= 0)
+
       addr match {
         case _: Immediate => 2
         case _: ZeroPage => 3
@@ -315,15 +317,14 @@ object Instruction {
       0xE1,
       0xF1
     ) { (value, addr, cpu) =>
-      val origAcc = toUnsignedInt(cpu.accumulator)
       val subtractedValue = toUnsignedInt(value)
-      val sub = origAcc - subtractedValue - (if (cpu.carryFlag) 0 else 1)
+      val sub = toUnsignedInt(cpu.accumulator) - subtractedValue - (if (cpu.carryFlag) 0 else 1)
 
-      cpu.overflowFlag = ((origAcc ^ sub) & 0x80) != 0 && ((origAcc ^ subtractedValue) & 0x80) != 0
+      cpu.overflowFlag = (((cpu.accumulator ^ sub) & 0x80) != 0) && (((cpu.accumulator ^ subtractedValue) & 0x80) == 0x80)
 
       cpu.accumulator = sub.toByte
       setZeroNeg(cpu.accumulator, cpu)
-      cpu.carryFlag = sub >= 0
+      cpu.carryFlag = (sub & 0x100) == 0
 
       addr match {
         case _: Immediate => 2
@@ -394,31 +395,35 @@ object Instruction {
         case _: Absolute => (rotated, 6)
         case _: AbsoluteX => (rotated, 7)
       }
-    } ++ generateMemoryModifyTypes("INC")(
-      0xE6, 0xF6, 0xEE, 0xFE
-    ) { (value, addr, cpu) =>
-      val inced = (value + 1).toByte
-      setZeroNeg(inced, cpu)
-
-      addr match {
-        case _: ZeroPage => (inced, 5)
-        case _: ZeroPageX => (inced, 6)
-        case _: Absolute => (inced, 6)
-        case _: AbsoluteX => (inced, 7)
-      }
-    } ++ generateMemoryModifyTypes("DEC")(
-      0xC6, 0xD6, 0xCE, 0xDE
-    ) { (value, addr, cpu) =>
-      val deced = (value - 1).toByte
-      setZeroNeg(deced, cpu)
-
-      addr match {
-        case _: ZeroPage => (deced, 5)
-        case _: ZeroPageX => (deced, 6)
-        case _: Absolute => (deced, 6)
-        case _: AbsoluteX => (deced, 7)
-      }
     } ++ Seq[Instruction[_ <: HList, _ <: Arg]](
+      Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]("DEC",
+        0xC6, 0xD6, 0xCE, 0xDE
+      ) { (addr, cpu) =>
+        val inced = (addr.getValue(cpu, cpu.memory) - 1).toByte
+        setZeroNeg(inced, cpu)
+        addr.writeValue(cpu, cpu.memory, inced)
+
+        addr match {
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
+      Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]("INC",
+        0xE6, 0xF6, 0xEE, 0xFE
+      ) { (addr, cpu) =>
+        val inced = (addr.getValue(cpu, cpu.memory) + 1).toByte
+        setZeroNeg(inced, cpu)
+        addr.writeValue(cpu, cpu.memory, inced)
+
+        addr match {
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
       Instruction[ZeroPage :: Absolute :: HNil, Address]("BIT", 0x24, 0x2C) { (addr, cpu) =>
         val memoryValue = cpu.memory.read(addr.address)
         val masked = toUnsignedInt(memoryValue) & toUnsignedInt(cpu.accumulator)
@@ -499,9 +504,10 @@ object Instruction {
         6
       },
 
-      Instruction[Immediate :: Absolute :: IndirectX :: Relative :: NoArgs :: HNil, Arg]("NOP",
+      Instruction[Immediate :: Absolute :: AbsoluteX :: IndirectX :: Relative :: NoArgs :: HNil, Arg]("NOP",
         Seq(0x04, 0x44, 0x64),
         Seq(0x0C),
+        Seq(0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC),
         Seq(0x14, 0x34, 0x54, 0x74, 0xD4, 0xF4),
         Seq(0x80),
         Seq(0x1A, 0x3A, 0x5A, 0x7A, 0xDA, 0xEA, 0xFA)
@@ -509,6 +515,7 @@ object Instruction {
         addr match {
           case _: Immediate => 3
           case _: Absolute => 4
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 4
           case _: Relative => 2
           case _: NoArgs => 2
