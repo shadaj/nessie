@@ -1,7 +1,6 @@
 package me.shadaj.nessie
 
 import shapeless._
-import shapeless.ops.hlist.{ToList, ToTraversable}
 import java.lang.Byte.toUnsignedInt
 
 import me.shadaj.nessie.instructions._
@@ -39,7 +38,7 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
   val opcodesToArgs: Seq[(Byte, ArgParser[Arg])] =
     opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2))
 
-  def run(parsedArg: LubA @uncheckedVariance, log: Boolean = false)(cpu: CPU) = {
+  def run(parsedArg: LubA @uncheckedVariance, log: Boolean = false)(cpu: CPU): Int = {
     if (log) {
       println(s"$this $parsedArg")
     }
@@ -51,7 +50,7 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
 
 class SeparateApply
 object SeparateApply {
-  implicit val imp = new SeparateApply
+  implicit val imp: SeparateApply = new SeparateApply
 }
 
 object Instruction {
@@ -61,16 +60,16 @@ object Instruction {
     apply[Args, LubA](name, opcodes.map(Seq(_)): _*)(execute)(parseArgs)
   }
 
-  def pageCrossExtra(original: Int, shifted: Int) = {
+  def pageCrossExtra(original: Int, shifted: Int): Int = {
     if ((original & 0xFF00) != (shifted & 0xFF00)) 1 else 0
   }
 
-  def setZeroNeg(value: Byte, cpu: CPU) = {
+  def setZeroNeg(value: Byte, cpu: CPU): Unit = {
     cpu.zeroFlag = value == 0
     cpu.negativeFlag = value < 0
   }
 
-  def pushToStack(value: Byte, cpu: CPU) = {
+  def pushToStack(value: Byte, cpu: CPU): Unit = {
     cpu.memory.write(0x0100 | toUnsignedInt(cpu.stackPointer), value)
     cpu.stackPointer = (cpu.stackPointer - 1).toByte
   }
@@ -90,11 +89,11 @@ object Instruction {
                               absoluteY: Int,
                               indirectX: Int,
                               indirectY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    generateNonIndirectXAddressTypes(name)(
-      immediate, zeroPage, zeroPageX, absolute, absoluteX
-    )(process) ++ Seq(
-      Instruction[AbsoluteY :: IndirectX :: IndirectIndexed :: HNil, Address](name, absoluteY, indirectX, indirectY) { (addr, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
+    Seq(
+      Instruction[Immediate :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: AbsoluteY :: IndirectX :: IndirectIndexed :: HNil, Readable](name,
+        immediate, zeroPage, zeroPageX, absolute, absoluteX, absoluteY, indirectX, indirectY
+      ) { (addr, cpu) =>
+        process(addr.getValue(cpu, cpu.memory), addr, cpu)
       }
     )
   }
@@ -108,21 +107,6 @@ object Instruction {
     Seq(
       Instruction[Immediate :: ZeroPage :: Absolute :: ZeroPageX :: AbsoluteX :: HNil, Readable](name,
         immediate, zeroPage, absolute, zeroPageX, absoluteX
-      ) { (addr, cpu) =>
-        process(addr.getValue(cpu, cpu.memory), addr, cpu)
-      }
-    )
-  }
-
-  def generateNonIndirectYAddressTypes(name: String)
-                                      (immediate: Int,
-                                       zeroPage: Int,
-                                       zeroPageY: Int,
-                                       absolute: Int,
-                                       absoluteY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    Seq(
-      Instruction[Immediate :: ZeroPage :: Absolute :: ZeroPageY :: AbsoluteY :: HNil, Readable](name,
-        immediate, zeroPage, absolute, zeroPageY, absoluteY
       ) { (addr, cpu) =>
         process(addr.getValue(cpu, cpu.memory), addr, cpu)
       }
