@@ -15,14 +15,15 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
     override def write(address: Int, value: Byte, memory: Memory): Unit = ???
   }, drawFrame)
 
-  println(file.mapperNumber)
-
   val memory = new Memory(Seq(
     new NESRam,
     ppu.cpuMemoryMapping,
     new APUIORegisters,
     new ControllerRegisters(currentButtonState),
-    if (file.mapperNumber == 0) new Mapper0(file.programRom) else new Mapper1(file.programRom)
+    file.mapperNumber match {
+      case 0 => new Mapper0(file.programRom)
+      case 1 => new Mapper1(file.programRom)
+    }
   ) ++ extraMemoryProviders)
   lazy val cpu: CPU = new CPU(memory)
 

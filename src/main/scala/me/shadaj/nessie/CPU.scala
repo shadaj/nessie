@@ -58,7 +58,8 @@ class CPU(val memory: Memory) {
       print(programCounter.formatted("%x").toUpperCase + " ")
     }
     programCounter += parser.size + 1
-    handleInterruptCycles + currentInstruction.run(instructionOpcode, i => memory.read(currentCounter + 1 + i), log)(this)
+    val parsedArgs = parser.parse(i => memory.read(currentCounter + 1 + i), this)
+    handleInterruptCycles + currentInstruction.run(parsedArgs, log)(this)
   }
 
   def tick: Int = tick(false)

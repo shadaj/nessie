@@ -6,39 +6,39 @@ import java.lang.Byte.toUnsignedInt
 
 import me.shadaj.nessie.instructions._
 
+import scala.annotation.unchecked.uncheckedVariance
+
 trait Arg
 
-trait ArgParser[A <: Arg] {
+trait ArgParser[+A <: Arg] {
   val size: Int
   def parse(getArg: Int => Byte, cpu: CPU): A
 }
 
 trait ArgsParser[Args <: HList] {
-  val parsers: Seq[ArgParser[_]]
+  val parsers: Seq[ArgParser[Arg]]
 }
 
 object ArgsParser {
   implicit val forNil: ArgsParser[HNil] = new ArgsParser[HNil] {
-    override val parsers: Seq[ArgParser[_]] = Seq.empty
+    override val parsers: Seq[ArgParser[Arg]] = Seq.empty
   }
 
   implicit def forCons[Head <: Arg, Tail <: HList](implicit argParser: ArgParser[Head], tailParser: ArgsParser[Tail]): ArgsParser[Head :: Tail] = new ArgsParser[Head :: Tail] {
-    val parsers = argParser +: tailParser.parsers
+    override val parsers: Seq[ArgParser[Arg]] = argParser +: tailParser.parsers
   }
 }
 
-case class Instruction[Args <: HList, LubA](name: String, opcodes: Seq[Int]*)
-                                           (execute: (LubA, CPU) => Int)
-                                           (implicit parseArgs: ArgsParser[Args]) {
+case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[Int]*)
+                                                   (execute: (LubA, CPU) => Int)
+                                                   (implicit parseArgs: ArgsParser[Args]) {
   if (opcodes.size != parseArgs.parsers.size) {
     throw new IllegalArgumentException("Opcodes and parsers must be the same size")
   }
 
-  val opcodesToArgs = opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2.asInstanceOf[ArgParser[Nothing]]))
-    .asInstanceOf[Seq[(Byte, ArgParser[Nothing])]].toMap
+  val opcodesToArgs = opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2))
 
-  def run(opcode: Byte, getArg: Int => Byte, log: Boolean = false)(cpu: CPU) = {
-    val parsedArg = opcodesToArgs(opcode).parse(getArg, cpu).asInstanceOf[LubA]
+  def run(parsedArg: LubA @uncheckedVariance, log: Boolean = false)(cpu: CPU) = {
     if (log) {
       println(s"$this $parsedArg")
     }
@@ -54,7 +54,7 @@ object SeparateApply {
 }
 
 object Instruction {
-  def apply[Args <: HList, LubA](name: String, opcodes: Int*)
+  def apply[Args <: HList, LubA <: Arg](name: String, opcodes: Int*)
                                 (execute: (LubA, CPU) => Int)
                                 (implicit parseArgs: ArgsParser[Args], separate: SeparateApply): Instruction[Args, LubA] = {
     apply[Args, LubA](name, opcodes.map(Seq(_)): _*)(execute)(parseArgs)
@@ -148,15 +148,7 @@ object Instruction {
     )
   }
 
-  def processNegativeFlag(value: Byte, isNegative: Boolean): Int = {
-    if (isNegative) {
-      value.toInt
-    } else {
-      java.lang.Byte.toUnsignedInt(value)
-    }
-  }
-
-  val cpuInstructionsList: Seq[Instruction[_ <: HList, _ <: Arg]] =
+  val cpuInstructionsList: Seq[Instruction[HList, Arg]] =
     BranchInstructions.branchInstructions ++
     StoreInstructions.storeInstructions ++
     LoadInstructions.loadInstructions ++
@@ -580,6 +572,8 @@ object Instruction {
       }
     )
 
-  val cpuInstructions = cpuInstructionsList.flatMap(i => i.opcodesToArgs.map(a => a._1 -> (i -> a._2)))
-    .asInstanceOf[Seq[(Byte, (Instruction[Nothing, Nothing], ArgParser[Nothing]))]].toMap
+  val cpuInstructions: Map[Byte, (Instruction[HList, Arg], ArgParser[Arg])] = {
+    cpuInstructionsList.flatMap(i => i.opcodesToArgs.map(a => a._1 -> (i, a._2)))
+      .toMap
+  }
 }
