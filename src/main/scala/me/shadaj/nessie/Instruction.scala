@@ -106,9 +106,11 @@ object Instruction {
                               zeroPageX: Int,
                               absolute: Int,
                               absoluteX: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    generateNonIndirectNoRegisterTypes(name)(immediate, zeroPage, absolute)(process) ++ Seq(
-      Instruction[ZeroPageX :: AbsoluteX :: HNil, Address](name, zeroPageX, absoluteX) { (addr, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
+    Seq(
+      Instruction[Immediate :: ZeroPage :: Absolute :: ZeroPageX :: AbsoluteX :: HNil, Readable](name,
+        immediate, zeroPage, absolute, zeroPageX, absoluteX
+      ) { (addr, cpu) =>
+        process(addr.getValue(cpu, cpu.memory), addr, cpu)
       }
     )
   }
@@ -119,19 +121,10 @@ object Instruction {
                                        zeroPageY: Int,
                                        absolute: Int,
                                        absoluteY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    generateNonIndirectNoRegisterTypes(name)(immediate, zeroPage, absolute)(process) ++ Seq(
-      Instruction[ZeroPageY :: AbsoluteY :: HNil, Address](name, zeroPageY, absoluteY) { (addr, cpu) =>
-        process(cpu.memory.read(addr.address), addr, cpu)
-      }
-    )
-  }
-
-  def generateNonIndirectNoRegisterTypes(name: String)
-                                        (immediate: Int,
-                                         zeroPage: Int,
-                                         absolute: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     Seq(
-      Instruction[Immediate :: ZeroPage :: Absolute :: HNil, Readable](name, immediate, zeroPage, absolute) { (addr, cpu) =>
+      Instruction[Immediate :: ZeroPage :: Absolute :: ZeroPageY :: AbsoluteY :: HNil, Readable](name,
+        immediate, zeroPage, absolute, zeroPageY, absoluteY
+      ) { (addr, cpu) =>
         process(addr.getValue(cpu, cpu.memory), addr, cpu)
       }
     )
@@ -143,24 +136,10 @@ object Instruction {
                           zeroPageX: Int,
                           absolute: Int,
                           absoluteX: Int)(process: (Byte, Readable, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    generateMemoryModifyTypes(name)(zeroPage, zeroPageX, absolute, absoluteX)(process) ++ Seq(
-      Instruction[Accumulator :: HNil, Readable with Writable](name, accumulator) { (addr, cpu) =>
-        val value = addr.getValue(cpu, cpu.memory)
-        val (ret, cycles) = process(value, addr, cpu)
-        addr.writeValue(cpu, cpu.memory, ret)
-        cycles
-      }
-    )
-  }
-
-  def generateMemoryModifyTypes(name: String)
-                         (zeroPage: Int,
-                          zeroPageX: Int,
-                          absolute: Int,
-                          absoluteX: Int)(process: (Byte, Address, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     Seq(
-      Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]
-                 (name, zeroPage, zeroPageX, absolute, absoluteX) { (addr, cpu) =>
+      Instruction[Accumulator :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Readable with Writable](name,
+        accumulator, zeroPage, zeroPageX, absolute, absoluteX
+      ) { (addr, cpu) =>
         val value = addr.getValue(cpu, cpu.memory)
         val (ret, cycles) = process(value, addr, cpu)
         addr.writeValue(cpu, cpu.memory, ret)
@@ -262,11 +241,10 @@ object Instruction {
       0x61,
       0x71
     ) { (value, addr, cpu) =>
-      val toAdd = toUnsignedInt(value)
-      val sum = toUnsignedInt(cpu.accumulator) + toAdd + (if (cpu.carryFlag) 1 else 0)
+      val sum = toUnsignedInt(cpu.accumulator) + toUnsignedInt(value) + (if (cpu.carryFlag) 1 else 0)
 
       cpu.carryFlag = (sum & 0x100) != 0
-      cpu.overflowFlag = (((cpu.accumulator ^ toAdd) & 0x80) != 0) && (((cpu.accumulator ^ sum) & 0x80) == 0x80)
+      cpu.overflowFlag = ((cpu.accumulator.toInt + value.toInt) > 0) != ((cpu.accumulator.toInt + value.toInt).toByte > 0)
 
       cpu.accumulator = sum.toByte
       setZeroNeg(cpu.accumulator, cpu)
@@ -320,11 +298,11 @@ object Instruction {
       val subtractedValue = toUnsignedInt(value)
       val sub = toUnsignedInt(cpu.accumulator) - subtractedValue - (if (cpu.carryFlag) 0 else 1)
 
-      cpu.overflowFlag = (((cpu.accumulator ^ sub) & 0x80) != 0) && (((cpu.accumulator ^ subtractedValue) & 0x80) == 0x80)
+      cpu.carryFlag = (sub & 0x100) == 0
+      cpu.overflowFlag = ((cpu.accumulator.toInt - value.toInt) > 0) != ((cpu.accumulator.toInt - value.toInt).toByte > 0)
 
       cpu.accumulator = sub.toByte
       setZeroNeg(cpu.accumulator, cpu)
-      cpu.carryFlag = (sub & 0x100) == 0
 
       addr match {
         case _: Immediate => 2

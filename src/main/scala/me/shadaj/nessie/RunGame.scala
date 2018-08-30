@@ -46,7 +46,7 @@ object RunGame extends App {
     }
   })
 
-  val console = new Console(NESFile.fromFile(new File("test-roms/nestest.nes")), f => {
+  val console = new Console(NESFile.fromFile(new File(args.head)), f => {
     currentFrame = f
     frame.repaint()
   }, () => buttonsPressed.toVector)
