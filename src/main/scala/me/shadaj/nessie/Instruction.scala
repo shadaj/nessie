@@ -42,6 +42,7 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
     if (log) {
       println(s"$this $parsedArg")
     }
+
     execute(parsedArg, cpu)
   }
 
@@ -80,6 +81,9 @@ object Instruction {
     ret
   }
 
+  type AllAddressTypes =
+    Immediate :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: AbsoluteY :: IndirectX :: IndirectIndexed :: HNil
+
   def generateAllAddressTypes(name: String)
                              (immediate: Int,
                               zeroPage: Int,
@@ -90,7 +94,7 @@ object Instruction {
                               indirectX: Int,
                               indirectY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
     Seq(
-      Instruction[Immediate :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: AbsoluteY :: IndirectX :: IndirectIndexed :: HNil, Readable](name,
+      Instruction[AllAddressTypes, Readable](name,
         immediate, zeroPage, zeroPageX, absolute, absoluteX, absoluteY, indirectX, indirectY
       ) { (addr, cpu) =>
         process(addr.getValue(cpu, cpu.memory), addr, cpu)
@@ -137,29 +141,6 @@ object Instruction {
     LoadInstructions.loadInstructions ++
     TransferInstructions.transferInstructions ++
     CompareInstructions.compareInstructions ++
-    generateAllAddressTypes("AND")(
-      0x29,
-      0x25,
-      0x35,
-      0x2D,
-      0x3D,
-      0x39,
-      0x21,
-      0x31
-    ) { (value, addr, cpu) =>
-      cpu.accumulator = (toUnsignedInt(cpu.accumulator) & toUnsignedInt(value)).toByte
-      setZeroNeg(cpu.accumulator, cpu)
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++
     generateAllAddressTypes("ORA")(
       0x09,
       0x05,
@@ -349,6 +330,23 @@ object Instruction {
         case _: AbsoluteX => (rotated, 7)
       }
     } ++ Seq[Instruction[_ <: HList, _ <: Arg]](
+      Instruction[AllAddressTypes, Readable]("AND",
+        0x29, 0x25, 0x35, 0x2D, 0x3D, 0x39, 0x21, 0x31
+      ) { (addr, cpu) =>
+        cpu.accumulator = (toUnsignedInt(cpu.accumulator) &
+          toUnsignedInt(addr.getValue(cpu, cpu.memory))).toByte
+        setZeroNeg(cpu.accumulator, cpu)
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
+        }
+      },
       Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]("DEC",
         0xC6, 0xD6, 0xCE, 0xDE
       ) { (addr, cpu) =>
