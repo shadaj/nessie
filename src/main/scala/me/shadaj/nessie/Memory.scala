@@ -1,9 +1,8 @@
 package me.shadaj.nessie
 
 trait MemoryProvider {
-  def contains(address: Int): Boolean
-  def canReadAt(address: Int): Boolean = contains(address)
-  def canWriteAt(address: Int): Boolean = contains(address)
+  def canReadAt(address: Int): Boolean
+  def canWriteAt(address: Int): Boolean
 
   def read(address: Int, memory: Memory): Byte
   def write(address: Int, value: Byte, memory: Memory): Unit
@@ -39,7 +38,8 @@ class Memory(providers: Seq[MemoryProvider]) {
 class NESRam extends MemoryProvider {
   val memory = new Array[Byte](2048)
 
-  override def contains(address: Int): Boolean = address >= 0x0 && address <= 0x1FFF
+  override def canReadAt(address: Int): Boolean = address >= 0x0 && address <= 0x1FFF
+  override def canWriteAt(address: Int): Boolean = address >= 0x0 && address <= 0x1FFF
 
   override def read(address: Int, memoryAccess: Memory): Byte = {
     memory(address % 2048)
@@ -51,7 +51,9 @@ class NESRam extends MemoryProvider {
 }
 
 class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
-  override def contains(address: Int): Boolean = address >= 0x8000
+  override def canReadAt(address: Int): Boolean = address >= 0x8000
+  override def canWriteAt(address: Int): Boolean = false
+
   override def read(address: Int, memory: Memory): Byte = {
     if (address >= 0x8000 && address < 0xC000) {
       prgRom(address - 0x8000)
@@ -73,7 +75,9 @@ class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
 }
 
 class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
-  override def contains(address: Int): Boolean = address >= 0x8000
+  override def canReadAt(address: Int): Boolean = address >= 0x8000
+  override def canWriteAt(address: Int): Boolean = address >= 0x8000
+
   override def read(address: Int, memory: Memory): Byte = {
     if (address >= 0x8000 && address < 0xC000) {
       prgRom(address - 0x8000)
@@ -97,9 +101,8 @@ class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
 class APUIORegisters extends MemoryProvider {
   val memory = new Array[Byte](24)
 
-  override def contains(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014
-  override def canReadAt(address: Int): Boolean = super.canReadAt(address) && address != 0x4016 && address != 0x4017
-  override def canWriteAt(address: Int): Boolean = super.canWriteAt(address) && address != 0x4016
+  override def canReadAt(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014 && address != 0x4016 && address != 0x4017
+  override def canWriteAt(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014 && address != 0x4016
 
   override def read(address: Int, memoryAccess: Memory): Byte = {
     memory(address - 0x4000)
@@ -115,7 +118,7 @@ class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends Memory
   private var incrementIndex = false
   private var currentIndex = 0
 
-  override def contains(address: Int): Boolean = address == 0x4016 || address == 0x4017
+  override def canReadAt(address: Int): Boolean = address == 0x4016 || address == 0x4017
   override def canWriteAt(address: Int): Boolean = address == 0x4016
 
   override def read(address: Int, memory: Memory): Byte = {

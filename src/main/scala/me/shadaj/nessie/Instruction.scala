@@ -36,7 +36,8 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
     throw new IllegalArgumentException("Opcodes and parsers must be the same size")
   }
 
-  val opcodesToArgs = opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2))
+  val opcodesToArgs: Seq[(Byte, ArgParser[Arg])] =
+    opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2))
 
   def run(parsedArg: LubA @uncheckedVariance, log: Boolean = false)(cpu: CPU) = {
     if (log) {
@@ -55,8 +56,8 @@ object SeparateApply {
 
 object Instruction {
   def apply[Args <: HList, LubA <: Arg](name: String, opcodes: Int*)
-                                (execute: (LubA, CPU) => Int)
-                                (implicit parseArgs: ArgsParser[Args], separate: SeparateApply): Instruction[Args, LubA] = {
+                                       (execute: (LubA, CPU) => Int)
+                                       (implicit parseArgs: ArgsParser[Args], separate: SeparateApply): Instruction[Args, LubA] = {
     apply[Args, LubA](name, opcodes.map(Seq(_)): _*)(execute)(parseArgs)
   }
 
@@ -79,8 +80,6 @@ object Instruction {
     val ret = cpu.memory.read(0x0100 | toUnsignedInt(cpu.stackPointer))
     ret
   }
-
-  implicit val nilToList: ToList[HNil, Arg] = ToTraversable.hnilToTraversable[HNil, List, Arg]
 
   def generateAllAddressTypes(name: String)
                              (immediate: Int,

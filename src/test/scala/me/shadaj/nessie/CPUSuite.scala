@@ -59,23 +59,26 @@ class CPUSuite extends FunSuite {
 
     val console = new Console(file, _ => {}, () => Seq.fill(5)(false), Seq(
       new MemoryProvider { // test ROMs write the result text here
-      private val stringMemory = new Array[Byte](256)
-      override def contains(address: Int): Boolean = address >= 0x6000
+        private val stringMemory = new Array[Byte](256)
 
-      override def read(address: Int, memory: Memory): Byte = ???
+        override def canReadAt(address: Int): Boolean = false
+        override def canWriteAt(address: Int): Boolean = address >= 0x6000
 
-      override def write(address: Int, value: Byte, memory: Memory): Unit = {
-        if (address >= 0x6004) {
-          stringMemory(address - 0x6004) = value
-        }
+        override def read(address: Int, memory: Memory): Byte = ???
 
-        if (address == 0x6000 && value != -128) {
-          message = Iterator.from(0).map(stringMemory.apply).takeWhile(_ != 0).map(_.toChar).mkString
-          isDone = true
-          success = value == 0
+        override def write(address: Int, value: Byte, memory: Memory): Unit = {
+          if (address >= 0x6004) {
+            stringMemory(address - 0x6004) = value
+          }
+
+          if (address == 0x6000 && value != -128) {
+            message = Iterator.from(0).map(stringMemory.apply).takeWhile(_ != 0).map(_.toChar).mkString
+            isDone = true
+            success = value == 0
+          }
         }
       }
-    }))
+    ))
 
     while (!isDone) {
       console.tick()

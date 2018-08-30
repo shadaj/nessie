@@ -4,7 +4,8 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
   val ppu = new PPU(() => {
     cpu.runNMI
   }, new MemoryProvider {
-    override def contains(address: Int): Boolean = address < 0x2000
+    override def canReadAt(address: Int): Boolean = address < 0x2000
+    override def canWriteAt(address: Int): Boolean = false
 
     override def read(address: Int, memory: Memory): Byte = {
       if (address < file.chrRom.length) {
@@ -25,6 +26,7 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
       case 1 => new Mapper1(file.programRom)
     }
   ) ++ extraMemoryProviders)
+
   lazy val cpu: CPU = new CPU(memory)
 
   def tick(): Boolean = {

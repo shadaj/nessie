@@ -1,7 +1,5 @@
 package me.shadaj.nessie
 
-import scala.collection.mutable
-
 case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes: Int) {
   def isVisible = yPosition < 240
   def contains(x: Int, y: Int) =
@@ -43,7 +41,8 @@ class PPU(runNMI: () => Unit, ppuMappedMemory: MemoryProvider, drawFrame: Array[
   }
 
   val cpuMemoryMapping = new MemoryProvider {
-    override def contains(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
+    override def canReadAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
+    override def canWriteAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
 
     private var vramBuffer: Byte = 0
     override def read(address: Int, memory: Memory): Byte = {
