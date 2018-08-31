@@ -12,7 +12,7 @@ class CPUSuite extends FunSuite {
   private val officialOnly = NESFile.fromFile(new File("test-roms/official_only.nes"))
 
   test("Can execute some instructions from basic test ROM and report cycle count") {
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(basics.programRom)))
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(basics.programRom, basics.chrRom)))
     val cpu = new CPU(memory)
     assert(cpu.tick == 2) // SEI
     assert(cpu.tick == 3) // JMP $EB12
@@ -23,7 +23,7 @@ class CPUSuite extends FunSuite {
   }
 
   test("Can run nestest ROM through invalid opcodes (0x04)") {
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom)))
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom, basics.chrRom)))
     val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000

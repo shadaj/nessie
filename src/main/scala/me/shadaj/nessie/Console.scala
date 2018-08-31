@@ -1,33 +1,25 @@
 package me.shadaj.nessie
 
 class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, currentButtonState: () => Seq[Boolean], extraMemoryProviders: Seq[MemoryProvider] = Seq.empty) {
-  val ppu = new PPU(() => {
-    cpu.runNMI
-  }, new MemoryProvider {
-    override def canReadAt(address: Int): Boolean = address < 0x2000
-    override def canWriteAt(address: Int): Boolean = false
-
-    override def read(address: Int, memory: Memory): Byte = {
-      if (address < file.chrRom.length) {
-        file.chrRom(address)
-      } else 0
-    }
-
-    override def write(address: Int, value: Byte, memory: Memory): Unit = ???
-  }, drawFrame)
-
-  val memory = new Memory(Seq(
+  private val memoryProviders = Seq(
     new NESRam,
-    ppu.cpuMemoryMapping,
     new APUIORegisters,
     new ControllerRegisters(currentButtonState),
     file.mapperNumber match {
-      case 0 => new Mapper0(file.programRom)
-      case 1 => new Mapper1(file.programRom)
+      case 0 => new Mapper0(file.programRom, file.chrRom)
+      case 1 => new Mapper1(file.programRom, file.chrRom)
     }
-  ) ++ extraMemoryProviders)
+  ) ++ extraMemoryProviders
 
-  lazy val cpu: CPU = new CPU(memory)
+  val ppu = new PPU(() => {
+    cpu.runNMI
+  }, new Memory(memoryProviders.collect {
+    case m: PPUMemoryProvider => m.ppuMemory
+  }), drawFrame)
+
+  lazy val cpu: CPU = new CPU(new Memory(
+    memoryProviders :+ ppu.cpuMemoryMapping
+  ))
 
   def tick(): Boolean = {
     val cpuCycles = cpu.tick

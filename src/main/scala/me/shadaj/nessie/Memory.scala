@@ -8,7 +8,13 @@ trait MemoryProvider {
   def write(address: Int, value: Byte, memory: Memory): Unit
 }
 
-class Memory(providers: Seq[MemoryProvider]) {
+trait PPUMemoryProvider {
+  val ppuMemory: MemoryProvider
+}
+
+class Memory(providersGet: Seq[MemoryProvider]) {
+  private lazy val providers = providersGet
+
   def read(address: Int): Byte = providers.find(_.canReadAt(address)).getOrElse(
     throw new IllegalAccessException(f"Cannot read memory at 0x$address%X")
   ).read(address, this)
@@ -50,7 +56,7 @@ class NESRam extends MemoryProvider {
   }
 }
 
-class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
+class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider with PPUMemoryProvider  {
   override def canReadAt(address: Int): Boolean = address >= 0x8000
   override def canWriteAt(address: Int): Boolean = false
 
@@ -72,9 +78,22 @@ class Mapper0(prgRom: Array[Byte]) extends MemoryProvider {
   override def write(address: Int, value: Byte, memory: Memory): Unit = {
     throw new UnsupportedOperationException(s"Cannot write to program ROM, address $address was given")
   }
+
+  override val ppuMemory: MemoryProvider = new MemoryProvider {
+    override def canReadAt(address: Int): Boolean = address < 0x2000
+    override def canWriteAt(address: Int): Boolean = false
+
+    override def read(address: Int, memory: Memory): Byte = {
+      if (address < chrRom.length) {
+        chrRom(address)
+      } else 0
+    }
+
+    override def write(address: Int, value: Byte, memory: Memory): Unit = ???
+  }
 }
 
-class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
+class Mapper1(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider with PPUMemoryProvider {
   override def canReadAt(address: Int): Boolean = address >= 0x8000
   override def canWriteAt(address: Int): Boolean = address >= 0x8000
 
@@ -95,6 +114,19 @@ class Mapper1(prgRom: Array[Byte]) extends MemoryProvider {
 
   override def write(address: Int, value: Byte, memory: Memory): Unit = {
     // TODO: figure out when writing is actually allowed
+  }
+
+  override val ppuMemory: MemoryProvider = new MemoryProvider {
+    override def canReadAt(address: Int): Boolean = address < 0x2000
+    override def canWriteAt(address: Int): Boolean = false
+
+    override def read(address: Int, memory: Memory): Byte = {
+      if (address < chrRom.length) {
+        chrRom(address)
+      } else 0
+    }
+
+    override def write(address: Int, value: Byte, memory: Memory): Unit = ???
   }
 }
 
