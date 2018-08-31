@@ -6,6 +6,8 @@ case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes:
     x >= xPosition && x < (xPosition + 8) && containsY(y)
   def containsY(y: Int): Boolean =
     y >= yPosition && y < (yPosition + 8)
+
+  def aboveBackground: Boolean = (attributes & 0x20) == 0
 }
 
 class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
@@ -177,7 +179,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   }
 
   def getSpritePixelAt(x: Int, y: Int, spriteList: List[(Sprite, Int)]) = {
-    def searchForSprite(list: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int))] = {
+    def searchForSprite(list: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int), Sprite)] = {
       if (list.isEmpty) {
         None
       } else if (list.head._1.isVisible && list.head._1.contains(x, y)) {
@@ -196,7 +198,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
         val basePaletteAddress = 0x10 + ((s.attributes % 4) << 2)
 
         if (paletteIndex != 0) {
-          Some((list.head._2, nesToRGB(paletteMemory(basePaletteAddress + paletteIndex))))
+          Some((list.head._2, nesToRGB(paletteMemory(basePaletteAddress + paletteIndex)), list.head._1))
         } else {
           searchForSprite(list.tail)
         }
@@ -261,7 +263,16 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
         val pixelY = currentLine
         val spritePixel = getSpritePixelAt(pixelX, pixelY, currentLineSpriteList)
         val color =
-          spritePixel.map(_._2)
+          spritePixel
+            .map { case (_, pixel, sprite) =>
+              if (sprite.aboveBackground) {
+                pixel
+              } else {
+                getBackgroundPixelAt(pixelX, pixelY).getOrElse(
+                  pixel
+                )
+              }
+            }
             .orElse(getBackgroundPixelAt(pixelX, pixelY))
             .getOrElse(nesToRGB(universalBackgroundColor))
 
