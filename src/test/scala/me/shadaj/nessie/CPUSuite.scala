@@ -39,7 +39,7 @@ class CPUSuite extends FunSuite {
     }
   }
 
-  def runTestROM(file: NESFile) = {
+  def runTestROM(file: NESFile, log: Boolean = false) = {
     var isDone = false
     var success = false
     var message = ""
@@ -68,7 +68,7 @@ class CPUSuite extends FunSuite {
     ))
 
     while (!isDone) {
-      console.tick()
+      console.tick(log)
     }
 
     println(message)
@@ -113,5 +113,17 @@ class CPUSuite extends FunSuite {
 
 //  test("Can run ppu_sprite_hit/07-screen_bottom test ROM") {
 //    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/07-screen_bottom.nes")))
+//  }
+
+//  test("Can run ppu_sprite_hit/08-double_height test ROM") {
+//    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/08-double_height.nes")))
+//  }
+
+//  test("Can run ppu_sprite_hit/09-timing test ROM") {
+//    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/09-timing.nes")))
+//  }
+
+//  test("Can run ppu_sprite_hit/10-timing_order test ROM") {
+//    runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/10-timing_order.nes")))
 //  }
 }

@@ -39,11 +39,13 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
     opcodes.zip(parseArgs.parsers).flatMap(t => t._1.map(o => o.toByte -> t._2))
 
   def run(parsedArg: LubA @uncheckedVariance, log: Boolean = false)(cpu: CPU): Int = {
+    val cycles = execute(parsedArg, cpu)
+
     if (log) {
-      println(s"$this $parsedArg")
+      println(s"$this $parsedArg $cycles")
     }
 
-    execute(parsedArg, cpu)
+    cycles
   }
 
   override def toString: String = name
@@ -110,7 +112,7 @@ object Instruction {
           case _: ZeroPage => 3
           case _: ZeroPageX => 4
           case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: AbsoluteY => 4
           case _: IndirectX => 6
           case _: IndirectIndexed => 5
@@ -127,7 +129,7 @@ object Instruction {
           case _: ZeroPage => 3
           case _: ZeroPageX => 4
           case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: AbsoluteY => 4
           case _: IndirectX => 6
           case _: IndirectIndexed => 5
@@ -148,26 +150,6 @@ object Instruction {
           case _: ZeroPageX => 6
           case _: Absolute => 6
           case _: AbsoluteX => 7
-        }
-      },
-
-      Instruction[AllAddressTypes, Readable]("CMP",
-        0xC9, 0xC5, 0xD5, 0xCD, 0xDD, 0xD9, 0xC1, 0xD1
-      ) { (addr, cpu) =>
-        val value = addr.getValue(cpu, cpu.memory)
-        val result = toUnsignedInt(cpu.accumulator) - toUnsignedInt(value)
-        cpu.carryFlag = (result & 0x100) == 0
-        setZeroNeg(result.toByte, cpu)
-
-        addr match {
-          case _: Immediate => 2
-          case _: ZeroPage => 3
-          case _: ZeroPageX => 4
-          case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
-          case _: AbsoluteY => 4
-          case _: IndirectX => 6
-          case _: IndirectIndexed => 5
         }
       },
 
@@ -197,7 +179,7 @@ object Instruction {
           case _: ZeroPage => 3
           case _: ZeroPageX => 4
           case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: AbsoluteY => 4
           case _: IndirectX => 6
           case _: IndirectIndexed => 5
@@ -345,7 +327,7 @@ object Instruction {
           case _: ZeroPage => 3
           case _: ZeroPageX => 4
           case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: AbsoluteY => 4
           case _: IndirectX => 6
           case _: IndirectIndexed => 5
@@ -473,7 +455,7 @@ object Instruction {
           case _: ZeroPage => 3
           case _: ZeroPageX => 4
           case _: Absolute => 4
-          case _: AbsoluteX => 4 // TODO: page cross
+          case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
           case _: AbsoluteY => 4
           case _: IndirectX => 6
           case _: IndirectIndexed => 5

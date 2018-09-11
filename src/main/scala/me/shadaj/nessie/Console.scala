@@ -21,8 +21,8 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
     memoryProviders :+ ppu.cpuMemoryMapping
   ))
 
-  def tick(): Boolean = {
-    val cpuCycles = cpu.tick
+  def tick(log: Boolean = false): Boolean = {
+    val cpuCycles = cpu.tick(log)
     (1 to cpuCycles * 3).exists(_ => ppu.step())
   }
 }

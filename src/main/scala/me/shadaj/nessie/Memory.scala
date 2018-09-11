@@ -80,16 +80,20 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider w
   }
 
   override val ppuMemory: MemoryProvider = new MemoryProvider {
+    val localChrRom = if (chrRom.length == 0) new Array[Byte](0x2000) else chrRom
     override def canReadAt(address: Int): Boolean = address < 0x2000
-    override def canWriteAt(address: Int): Boolean = false
+    override def canWriteAt(address: Int): Boolean = address < localChrRom.length
 
     override def read(address: Int, memory: Memory): Byte = {
-      if (address < chrRom.length) {
-        chrRom(address)
+      if (address < localChrRom.length) {
+        localChrRom(address)
       } else 0
     }
 
-    override def write(address: Int, value: Byte, memory: Memory): Unit = ???
+    override def write(address: Int, value: Byte, memory: Memory): Unit = {
+      // allow writes to support Blargg PPU tests
+      localChrRom(address) = value
+    }
   }
 }
 

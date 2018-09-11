@@ -24,7 +24,7 @@ object LoadInstructions {
         case a: IndirectIndexed => 5 + Instruction.pageCrossExtra(a.indirect, a.address)
       }
     },
-    Instruction[Immediate :: ZeroPage :: ZeroPageY :: Absolute :: AbsoluteY :: HNil, Readable]("LDY",
+    Instruction[Immediate :: ZeroPage :: ZeroPageY :: Absolute :: AbsoluteY :: HNil, Readable]("LDX",
       0xA2, 0xA6, 0xB6, 0xAE, 0xBE
     ) { (addr, cpu) =>
       cpu.xRegister = addr.getValue(cpu, cpu.memory)

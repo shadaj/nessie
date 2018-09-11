@@ -19,6 +19,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   private var settingPPUHigh: Boolean = true
   private var currentPPUAddr: Int = 0
 
+  private var vblankFlag = false
+
   private var settingScrollX = true
   private var currentScrollX: Int = 0
   private var currentScrollY: Int = 0
@@ -62,9 +64,12 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       val actualAddress = (address - 0x2000) % 8 /* mirroring! */
       actualAddress match {
         case 0x2 =>
-          val vblank = currentLine >= 240
-          ((if (vblank) 1 else 0) << 7 |
+          val ret = ((if (vblankFlag) 1 else 0) << 7 |
            (if (spriteZeroHit) 1 else 0) << 6).toByte
+
+          vblankFlag = false
+
+          ret
         case 0x7 =>
           val addr = currentPPUAddr
           val ret = if (addr >= 0x1000 && addr < 0x2000) {
@@ -101,6 +106,9 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
             showSpritesLeft8 = ((value >>> 2) & 1) == 1
             showBackground = ((value >>> 3) & 1) == 1
             showSprites = ((value >>> 4) & 1) == 1
+
+          case 0x2 => // TODO: why writing here?
+
           case 0x3 =>
             oamAddress = java.lang.Byte.toUnsignedInt(value)
 
@@ -131,7 +139,9 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
           case 0x7 =>
             val addr = currentPPUAddr
 
-            if (addr >= 0x2000 && addr < (0x2000 + (30 * 32))) {
+            if (addr < 0x2000) {
+              ppuMemory.write(addr, value)
+            } else if (addr >= 0x2000 && addr < (0x2000 + (30 * 32))) {
               val relative = addr - 0x2000
               nametableA(relative / 32)(relative % 32) = value
             } else if (addr >= (0x2000 + (30 * 32)) && addr < 0x2400) {
@@ -250,9 +260,16 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   }
 
   private var currentLineSpriteList = List.empty[(Sprite, Int)]
+
   def step(): Boolean = {
-    if (currentLine == -1 && currentX == 1) {
-      spriteZeroHit = false
+    if (currentLine == -1) {
+      if (currentX == 0) {
+        vblankFlag = false
+      }
+
+      if (currentX == 1) {
+        spriteZeroHit = false
+      }
     }
 
     if (currentLine >= 0 && currentLine < 240) {
@@ -286,7 +303,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       }
     }
 
-    val didDraw = if (currentLine == 240 && currentX == 0) {
+    val didDraw = if (currentLine == 240 && currentX == 1) {
+      vblankFlag = true
       drawFrame(currentImage)
 
       lastFrameTime = System.currentTimeMillis()
@@ -304,7 +322,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       currentX = 0
     }
 
-    if (currentLine > 261) { // 261 is a dummy scanline
+    if (currentLine > 260) { // 261 / -1 is a dummy scanline
       currentLine = -1
     }
 
