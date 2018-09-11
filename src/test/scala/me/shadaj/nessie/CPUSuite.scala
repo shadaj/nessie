@@ -8,22 +8,9 @@ import scala.io.Source
 
 class CPUSuite extends FunSuite {
   private val nestest = NESFile.fromFile(new File("test-roms/nestest.nes"))
-  private val basics = NESFile.fromFile(new File("test-roms/01-basics.nes"))
-  private val officialOnly = NESFile.fromFile(new File("test-roms/official_only.nes"))
 
-  test("Can execute some instructions from basic test ROM and report cycle count") {
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(basics.programRom, basics.chrRom)))
-    val cpu = new CPU(memory)
-    assert(cpu.tick == 2) // SEI
-    assert(cpu.tick == 3) // JMP $EB12
-    assert(cpu.tick == 4) // STA $224
-    assert(cpu.tick == 2) // LDA #0
-    assert(cpu.tick == 4) // STA $2000
-    assert(cpu.tick == 4) // STA $2001
-  }
-
-  test("Can run nestest ROM through invalid opcodes (0x04)") {
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom, basics.chrRom)))
+  test("Can run nestest ROM through invalid opcodes (0xA3)") {
+    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom, nestest.chrRom)))
     val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000
@@ -89,15 +76,15 @@ class CPUSuite extends FunSuite {
   }
 
   test("Can run 01-basics test ROM") {
-    runTestROM(NESFile.fromFile(new File("test-roms/01-basics.nes")))
+    runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/rom_singles/01-basics.nes")))
   }
 
   test("Can run 02-implied test ROM") {
-    runTestROM(NESFile.fromFile(new File("test-roms/02-implied.nes")))
+    runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/rom_singles/02-implied.nes")))
   }
 
   test("Can run official_only test ROM") {
-    runTestROM(NESFile.fromFile(new File("test-roms/official_only.nes")))
+    runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/official_only.nes")))
   }
 
   test("Can run ppu_sprite_hit/01-basics test ROM") {

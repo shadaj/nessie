@@ -1,13 +1,10 @@
 package me.shadaj.nessie.instructions
 
-import me.shadaj.nessie.{Arg, Instruction, NoArgs}
+import me.shadaj.nessie.{Instruction, NoArgs}
 import me.shadaj.nessie.Instruction.setZeroNeg
 import shapeless._
-import shapeless.ops.hlist.{ToList, ToTraversable}
 
 object TransferInstructions {
-  implicit val nilToList: ToList[HNil, Arg] = ToTraversable.hnilToTraversable[HNil, List, Arg]
-
   val transferInstructions = Seq(
     Instruction[NoArgs :: HNil, NoArgs]("TAX", 0xAA) { (_, cpu) =>
       cpu.xRegister = cpu.accumulator

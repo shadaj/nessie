@@ -84,56 +84,7 @@ object Instruction {
   type AllAddressTypes =
     Immediate :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: AbsoluteY :: IndirectX :: IndirectIndexed :: HNil
 
-  def generateAllAddressTypes(name: String)
-                             (immediate: Int,
-                              zeroPage: Int,
-                              zeroPageX: Int,
-                              absolute: Int,
-                              absoluteX: Int,
-                              absoluteY: Int,
-                              indirectX: Int,
-                              indirectY: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    Seq(
-      Instruction[AllAddressTypes, Readable](name,
-        immediate, zeroPage, zeroPageX, absolute, absoluteX, absoluteY, indirectX, indirectY
-      ) { (addr, cpu) =>
-        process(addr.getValue(cpu, cpu.memory), addr, cpu)
-      }
-    )
-  }
-
-  def generateNonIndirectXAddressTypes(name: String)
-                             (immediate: Int,
-                              zeroPage: Int,
-                              zeroPageX: Int,
-                              absolute: Int,
-                              absoluteX: Int)(process: (Byte, Readable, CPU) => Int): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    Seq(
-      Instruction[Immediate :: ZeroPage :: Absolute :: ZeroPageX :: AbsoluteX :: HNil, Readable](name,
-        immediate, zeroPage, absolute, zeroPageX, absoluteX
-      ) { (addr, cpu) =>
-        process(addr.getValue(cpu, cpu.memory), addr, cpu)
-      }
-    )
-  }
-
-  def generateModifyTypes(name: String)
-                         (accumulator: Int,
-                          zeroPage: Int,
-                          zeroPageX: Int,
-                          absolute: Int,
-                          absoluteX: Int)(process: (Byte, Readable, CPU) => (Byte, Int)): Seq[Instruction[_ <: HList, _ <: Arg]] = {
-    Seq(
-      Instruction[Accumulator :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Readable with Writable](name,
-        accumulator, zeroPage, zeroPageX, absolute, absoluteX
-      ) { (addr, cpu) =>
-        val value = addr.getValue(cpu, cpu.memory)
-        val (ret, cycles) = process(value, addr, cpu)
-        addr.writeValue(cpu, cpu.memory, ret)
-        cycles
-      }
-    )
-  }
+  type ModifyTypes = Accumulator :: ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil
 
   val cpuInstructionsList: Seq[Instruction[HList, Arg]] =
     BranchInstructions.branchInstructions ++
@@ -141,195 +92,30 @@ object Instruction {
     LoadInstructions.loadInstructions ++
     TransferInstructions.transferInstructions ++
     CompareInstructions.compareInstructions ++
-    generateAllAddressTypes("ORA")(
-      0x09,
-      0x05,
-      0x15,
-      0x0D,
-      0x1D,
-      0x19,
-      0x01,
-      0x11
-    ) { (value, addr, cpu) =>
-      cpu.accumulator = (toUnsignedInt(cpu.accumulator) | toUnsignedInt(value)).toByte
-      setZeroNeg(cpu.accumulator, cpu)
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++
-    generateAllAddressTypes("EOR")(
-      0x49,
-      0x45,
-      0x55,
-      0x4D,
-      0x5D,
-      0x59,
-      0x41,
-      0x51
-    ) { (value, addr, cpu) =>
-      cpu.accumulator = (toUnsignedInt(cpu.accumulator) ^ toUnsignedInt(value)).toByte
-      setZeroNeg(cpu.accumulator, cpu)
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++
-    generateAllAddressTypes("ADC")(
-      0x69,
-      0x65,
-      0x75,
-      0x6D,
-      0x7D,
-      0x79,
-      0x61,
-      0x71
-    ) { (value, addr, cpu) =>
-      val sum = toUnsignedInt(cpu.accumulator) + toUnsignedInt(value) + (if (cpu.carryFlag) 1 else 0)
+    Seq[Instruction[_ <: HList, _ <: Arg]](
+      Instruction[AllAddressTypes, Readable]("ADC",
+        0x69, 0x65, 0x75, 0x6D, 0x7D, 0x79, 0x61, 0x71
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val sum = toUnsignedInt(cpu.accumulator) + toUnsignedInt(value) + (if (cpu.carryFlag) 1 else 0)
 
-      cpu.carryFlag = (sum & 0x100) != 0
-      cpu.overflowFlag = ((cpu.accumulator.toInt + value.toInt) > 0) != ((cpu.accumulator.toInt + value.toInt).toByte > 0)
+        cpu.carryFlag = (sum & 0x100) != 0
+        cpu.overflowFlag = ((cpu.accumulator.toInt + value.toInt) > 0) != ((cpu.accumulator.toInt + value.toInt).toByte > 0)
 
-      cpu.accumulator = sum.toByte
-      setZeroNeg(cpu.accumulator, cpu)
+        cpu.accumulator = sum.toByte
+        setZeroNeg(cpu.accumulator, cpu)
 
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++
-    generateAllAddressTypes("CMP")(
-      0xC9,
-      0xC5,
-      0xD5,
-      0xCD,
-      0xDD,
-      0xD9,
-      0xC1,
-      0xD1
-    ) { (value, addr, cpu) =>
-      val result = toUnsignedInt(cpu.accumulator) - toUnsignedInt(value)
-      cpu.carryFlag = (result & 0x100) == 0
-      setZeroNeg(result.toByte, cpu)
-
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++
-    generateAllAddressTypes("SBC")(
-      0xE9,
-      0xE5,
-      0xF5,
-      0xED,
-      0xFD,
-      0xF9,
-      0xE1,
-      0xF1
-    ) { (value, addr, cpu) =>
-      val subtractedValue = toUnsignedInt(value)
-      val sub = toUnsignedInt(cpu.accumulator) - subtractedValue - (if (cpu.carryFlag) 0 else 1)
-
-      cpu.carryFlag = (sub & 0x100) == 0
-      cpu.overflowFlag = ((cpu.accumulator.toInt - value.toInt) > 0) != ((cpu.accumulator.toInt - value.toInt).toByte > 0)
-
-      cpu.accumulator = sub.toByte
-      setZeroNeg(cpu.accumulator, cpu)
-
-      addr match {
-        case _: Immediate => 2
-        case _: ZeroPage => 3
-        case _: ZeroPageX => 4
-        case _: Absolute => 4
-        case _: AbsoluteX => 4 // TODO: page cross
-        case _: AbsoluteY => 4
-        case _: IndirectX => 6
-        case _: IndirectIndexed => 5
-      }
-    } ++ generateModifyTypes("LSR")(
-      0x4A, 0x46, 0x56, 0x4E, 0x5E
-    ) { (value, addr, cpu) =>
-      cpu.carryFlag = (value & 1) == 1
-      val shifted = (toUnsignedInt(value) >>> 1).toByte
-      setZeroNeg(shifted, cpu)
-
-      addr match {
-        case _: Accumulator => (shifted, 2)
-        case _: ZeroPage => (shifted, 5)
-        case _: ZeroPageX => (shifted, 6)
-        case _: Absolute => (shifted, 6)
-        case _: AbsoluteX => (shifted, 7)
-      }
-    } ++ generateModifyTypes("ASL")(
-      0x0A, 0x06, 0x16, 0x0E, 0x1E
-    ) { (value, addr, cpu) =>
-      cpu.carryFlag = (toUnsignedInt(value) >> 7) == 1
-      val shifted = (toUnsignedInt(value) << 1).toByte
-      setZeroNeg(shifted, cpu)
-
-      addr match {
-        case _: Accumulator => (shifted, 2)
-        case _: ZeroPage => (shifted, 5)
-        case _: ZeroPageX => (shifted, 6)
-        case _: Absolute => (shifted, 6)
-        case _: AbsoluteX => (shifted, 7)
-      }
-    } ++ generateModifyTypes("ROR")(
-      0x6A, 0x66, 0x76, 0x6E, 0x7E
-    ) { (value, addr, cpu) =>
-      val newCarry = (value & 1) == 1
-      val rotated = ((toUnsignedInt(value) >>> 1) | ((if (cpu.carryFlag) 1 else 0) << 7)).toByte
-      cpu.carryFlag = newCarry
-      setZeroNeg(rotated, cpu)
-
-      addr match {
-        case _: Accumulator => (rotated, 2)
-        case _: ZeroPage => (rotated, 5)
-        case _: ZeroPageX => (rotated, 6)
-        case _: Absolute => (rotated, 6)
-        case _: AbsoluteX => (rotated, 7)
-      }
-    } ++ generateModifyTypes("ROL")(
-      0x2A, 0x26, 0x36, 0x2E, 0x3E
-    ) { (value, addr, cpu) =>
-      val newCarry = (toUnsignedInt(value) >> 7) == 1
-      val rotated = ((toUnsignedInt(value) << 1) | (if (cpu.carryFlag) 1 else 0)).toByte
-      cpu.carryFlag = newCarry
-
-      setZeroNeg(rotated, cpu)
-
-      addr match {
-        case _: Accumulator => (rotated, 2)
-        case _: ZeroPage => (rotated, 5)
-        case _: ZeroPageX => (rotated, 6)
-        case _: Absolute => (rotated, 6)
-        case _: AbsoluteX => (rotated, 7)
-      }
-    } ++ Seq[Instruction[_ <: HList, _ <: Arg]](
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
+        }
+      },
       Instruction[AllAddressTypes, Readable]("AND",
         0x29, 0x25, 0x35, 0x2D, 0x3D, 0x39, 0x21, 0x31
       ) { (addr, cpu) =>
@@ -347,6 +133,44 @@ object Instruction {
           case _: IndirectIndexed => 5
         }
       },
+      Instruction[ModifyTypes, Readable with Writable]("ASL",
+        0x0A, 0x06, 0x16, 0x0E, 0x1E
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        cpu.carryFlag = (toUnsignedInt(value) >> 7) == 1
+        val shifted = (toUnsignedInt(value) << 1).toByte
+        setZeroNeg(shifted, cpu)
+
+        addr.writeValue(cpu, cpu.memory, shifted)
+        addr match {
+          case _: Accumulator => 2
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
+
+      Instruction[AllAddressTypes, Readable]("CMP",
+        0xC9, 0xC5, 0xD5, 0xCD, 0xDD, 0xD9, 0xC1, 0xD1
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val result = toUnsignedInt(cpu.accumulator) - toUnsignedInt(value)
+        cpu.carryFlag = (result & 0x100) == 0
+        setZeroNeg(result.toByte, cpu)
+
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
+        }
+      },
+
       Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]("DEC",
         0xC6, 0xD6, 0xCE, 0xDE
       ) { (addr, cpu) =>
@@ -361,6 +185,25 @@ object Instruction {
           case _: AbsoluteX => 7
         }
       },
+
+      Instruction[AllAddressTypes, Readable]("EOR",
+        0x49, 0x45, 0x55, 0x4D, 0x5D, 0x59, 0x41, 0x51
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        cpu.accumulator = (toUnsignedInt(cpu.accumulator) ^ toUnsignedInt(value)).toByte
+        setZeroNeg(cpu.accumulator, cpu)
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
+        }
+      },
+
       Instruction[ZeroPage :: ZeroPageX :: Absolute :: AbsoluteX :: HNil, Address]("INC",
         0xE6, 0xF6, 0xEE, 0xFE
       ) { (addr, cpu) =>
@@ -455,6 +298,24 @@ object Instruction {
         6
       },
 
+      Instruction[ModifyTypes, Readable with Writable]("LSR",
+        0x4A, 0x46, 0x56, 0x4E, 0x5E
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        cpu.carryFlag = (value & 1) == 1
+        val shifted = (toUnsignedInt(value) >>> 1).toByte
+        setZeroNeg(shifted, cpu)
+
+        addr.writeValue(cpu, cpu.memory, shifted)
+        addr match {
+          case _: Accumulator => 2
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
+
       Instruction[Immediate :: Absolute :: AbsoluteX :: IndirectX :: Relative :: NoArgs :: HNil, Arg]("NOP",
         Seq(0x04, 0x44, 0x64),
         Seq(0x0C),
@@ -470,6 +331,24 @@ object Instruction {
           case _: IndirectX => 4
           case _: Relative => 2
           case _: NoArgs => 2
+        }
+      },
+
+      Instruction[AllAddressTypes, Readable]("ORA",
+        0x09, 0x05, 0x15, 0x0D, 0x1D, 0x19, 0x01, 0x11
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        cpu.accumulator = (toUnsignedInt(cpu.accumulator) | toUnsignedInt(value)).toByte
+        setZeroNeg(cpu.accumulator, cpu)
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
         }
       },
 
@@ -507,6 +386,45 @@ object Instruction {
         4
       },
 
+      Instruction[ModifyTypes, Readable with Writable]("ROL",
+        0x2A, 0x26, 0x36, 0x2E, 0x3E
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val newCarry = (toUnsignedInt(value) >> 7) == 1
+        val rotated = ((toUnsignedInt(value) << 1) | (if (cpu.carryFlag) 1 else 0)).toByte
+        cpu.carryFlag = newCarry
+
+        setZeroNeg(rotated, cpu)
+
+        addr.writeValue(cpu, cpu.memory, rotated)
+        addr match {
+          case _: Accumulator => 2
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
+
+      Instruction[ModifyTypes, Readable with Writable]("ROR",
+        0x6A, 0x66, 0x76, 0x6E, 0x7E
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val newCarry = (value & 1) == 1
+        val rotated = ((toUnsignedInt(value) >>> 1) | ((if (cpu.carryFlag) 1 else 0) << 7)).toByte
+        cpu.carryFlag = newCarry
+        setZeroNeg(rotated, cpu)
+
+        addr.writeValue(cpu, cpu.memory, rotated)
+        addr match {
+          case _: Accumulator => 2
+          case _: ZeroPage => 5
+          case _: ZeroPageX => 6
+          case _: Absolute => 6
+          case _: AbsoluteX => 7
+        }
+      },
+
       Instruction[NoArgs :: HNil, Arg]("RTS", 0x60) { (_, cpu) =>
         val lowerByte = popFromStack(cpu)
         val upperByte = popFromStack(cpu)
@@ -535,6 +453,31 @@ object Instruction {
         cpu.programCounter = java.lang.Byte.toUnsignedInt(lowerByte) | (java.lang.Byte.toUnsignedInt(upperByte) << 8)
 
         6
+      },
+
+      Instruction[AllAddressTypes, Readable]("SBC",
+        0xE9, 0xE5, 0xF5, 0xED, 0xFD, 0xF9, 0xE1, 0xF1
+      ) { (addr, cpu) =>
+        val value = addr.getValue(cpu, cpu.memory)
+        val subtractedValue = toUnsignedInt(value)
+        val sub = toUnsignedInt(cpu.accumulator) - subtractedValue - (if (cpu.carryFlag) 0 else 1)
+
+        cpu.carryFlag = (sub & 0x100) == 0
+        cpu.overflowFlag = ((cpu.accumulator.toInt - value.toInt) > 0) != ((cpu.accumulator.toInt - value.toInt).toByte > 0)
+
+        cpu.accumulator = sub.toByte
+        setZeroNeg(cpu.accumulator, cpu)
+
+        addr match {
+          case _: Immediate => 2
+          case _: ZeroPage => 3
+          case _: ZeroPageX => 4
+          case _: Absolute => 4
+          case _: AbsoluteX => 4 // TODO: page cross
+          case _: AbsoluteY => 4
+          case _: IndirectX => 6
+          case _: IndirectIndexed => 5
+        }
       },
 
       Instruction[NoArgs :: HNil, Arg]("SEC", 0x38) { (_, cpu) =>

@@ -3,6 +3,7 @@ package me.shadaj.nessie
 import java.awt.{Color, Graphics}
 import java.awt.event.{KeyEvent, KeyListener}
 import java.io.File
+import java.util.{Timer, TimerTask}
 
 import javax.swing.JFrame
 
@@ -51,11 +52,9 @@ object RunGame extends App {
     frame.repaint()
   }, () => buttonsPressed.toVector)
 
-  var previousFrame = System.currentTimeMillis()
-  while (true) {
-    Thread.sleep(((previousFrame + 16) - System.currentTimeMillis()) max 0)
-    val start = System.currentTimeMillis()
-    while (!console.tick()) {}
-    previousFrame = start
-  }
+  (new Timer).scheduleAtFixedRate(new TimerTask {
+    override def run(): Unit = {
+      while (!console.tick()) {}
+    }
+  }, 0, 1000 / 60)
 }
