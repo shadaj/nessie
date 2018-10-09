@@ -21,9 +21,9 @@ object CompareInstructions {
         case _: ZeroPageX => 4
         case _: Absolute => 4
         case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-        case _: AbsoluteY => 4
+        case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
         case _: IndirectX => 6
-        case _: IndirectIndexed => 5
+        case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
       }
     },
     Instruction[Immediate :: ZeroPage :: Absolute :: HNil, Readable]("CPX", 0xE0, 0xE4, 0xEC) { (addr, cpu) =>

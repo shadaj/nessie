@@ -117,9 +117,9 @@ object Instruction {
           case _: ZeroPageX => 4
           case _: Absolute => 4
           case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-          case _: AbsoluteY => 4
+          case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 6
-          case _: IndirectIndexed => 5
+          case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
         }
       },
       Instruction[AllAddressTypes, Readable]("AND",
@@ -134,9 +134,9 @@ object Instruction {
           case _: ZeroPageX => 4
           case _: Absolute => 4
           case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-          case _: AbsoluteY => 4
+          case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 6
-          case _: IndirectIndexed => 5
+          case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
         }
       },
       Instruction[ModifyTypes, Readable with Writable]("ASL",
@@ -184,9 +184,9 @@ object Instruction {
           case _: ZeroPageX => 4
           case _: Absolute => 4
           case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-          case _: AbsoluteY => 4
+          case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 6
-          case _: IndirectIndexed => 5
+          case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
         }
       },
 
@@ -332,9 +332,9 @@ object Instruction {
           case _: ZeroPageX => 4
           case _: Absolute => 4
           case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-          case _: AbsoluteY => 4
+          case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 6
-          case _: IndirectIndexed => 5
+          case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
         }
       },
 
@@ -460,9 +460,9 @@ object Instruction {
           case _: ZeroPageX => 4
           case _: Absolute => 4
           case a: AbsoluteX => 4 + pageCrossExtra(a.absolute, a.address)
-          case _: AbsoluteY => 4
+          case a: AbsoluteY => 4 + pageCrossExtra(a.absolute, a.address)
           case _: IndirectX => 6
-          case _: IndirectIndexed => 5
+          case a: IndirectIndexed => 5 + pageCrossExtra(a.indirect, a.address)
         }
       },
 
