@@ -13,6 +13,10 @@ class InstructionsSuite extends FunSuite {
     Util.runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/rom_singles/02-implied.nes")))
   }
 
+  test("Can run 15-brk test ROM") {
+    Util.runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/rom_singles/15-brk.nes")))
+  }
+
   test("Can run official_only test ROM") {
     Util.runTestROM(NESFile.fromFile(new File("test-roms/instr_test-v5/official_only.nes")))
   }

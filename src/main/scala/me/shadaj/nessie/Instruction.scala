@@ -42,7 +42,7 @@ case class Instruction[+Args <: HList, +LubA <: Arg](name: String, opcodes: Seq[
     val cycles = execute(parsedArg, cpu)
 
     if (log) {
-      println(s"$this $parsedArg $cycles")
+      println(s"$this $parsedArg $cycles A:${cpu.accumulator} X:${cpu.xRegister}")
     }
 
     cycles
@@ -95,6 +95,10 @@ object Instruction {
     TransferInstructions.transferInstructions ++
     CompareInstructions.compareInstructions ++
     Seq[Instruction[_ <: HList, _ <: Arg]](
+      Instruction[Immediate :: HNil, Arg]("BRK", 0x00) { (addr, cpu) =>
+        cpu.interruptAddress = Some(cpu.memory.readTwoBytes(0xFFFE))
+        0
+      },
       Instruction[AllAddressTypes, Readable]("ADC",
         0x69, 0x65, 0x75, 0x6D, 0x7D, 0x79, 0x61, 0x71
       ) { (addr, cpu) =>
