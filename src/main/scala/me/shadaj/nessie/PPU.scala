@@ -137,7 +137,10 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
               currentScrollX = (currentScrollX & 0xFF) | xScrollBase
             }
           case 0x7 =>
-            val addr = currentPPUAddr
+            val addrBeforeMirror = currentPPUAddr 
+            val addr = if (addrBeforeMirror >= 0x2800 && addrBeforeMirror < 0x3000) {
+              addrBeforeMirror - 0x800
+            } else addrBeforeMirror
 
             if (addr < 0x2000) {
               ppuMemory.write(addr, value)

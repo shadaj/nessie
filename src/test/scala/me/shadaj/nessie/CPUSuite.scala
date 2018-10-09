@@ -34,7 +34,7 @@ class CPUSuite extends FunSuite {
       if (cpu.memory.read(cpu.programCounter) == 0xA3.toByte) {
         stopRunning = true
       } else {
-        ticks += cpu.tick(true)
+        ticks += cpu.tick
       }
     }
   }

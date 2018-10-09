@@ -1,0 +1,7 @@
+language: scala
+branches:
+  only:
+    - master
+    - /^v\d+(\.\d+)+$/
+script:
+  - sbt test
