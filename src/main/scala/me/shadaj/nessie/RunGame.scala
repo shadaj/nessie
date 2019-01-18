@@ -3,7 +3,6 @@ package me.shadaj.nessie
 import java.awt.{Color, Graphics}
 import java.awt.event.{KeyEvent, KeyListener}
 import java.io.File
-import java.util.{Timer, TimerTask}
 
 import javax.swing.JFrame
 
@@ -49,12 +48,13 @@ object RunGame extends App {
 
   val console = new Console(NESFile.fromFile(new File(args.head)), f => {
     currentFrame = f
-    frame.repaint()
   }, () => buttonsPressed.toVector)
 
-  (new Timer).scheduleAtFixedRate(new TimerTask {
-    override def run(): Unit = {
-      while (!console.tick()) {}
-    }
-  }, 0, 1000 / 60)
+  val nanoPeriod = (1000 * 1000 * 1000) / 60
+  while (true) {
+    val startTime = System.nanoTime()
+    frame.repaint() // draw the frame that was loaded up in the last loop
+    while (!console.tick()) {} // load up a frame
+    while ((System.nanoTime() - startTime) < nanoPeriod) {} // wait until it's time to display the frame
+  }
 }

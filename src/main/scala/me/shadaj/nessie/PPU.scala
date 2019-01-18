@@ -183,7 +183,9 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     .stripMargin.split('\n').flatMap(_.split(' ')).filterNot(_.isEmpty).map(_.toInt)
     .grouped(3).map(a => (a(0), a(1), a(2))).toArray
 
-  def readPattern(baseTable: Int, index: Int, x: Int, y: Int, flipVertical: Boolean = false, flipHorizontal: Boolean = false): Int = {
+  def readPattern(baseTable: Int, index: Int,
+                  x: Int, y: Int,
+                  flipVertical: Boolean = false, flipHorizontal: Boolean = false): Int = {
     val xInPattern = if (flipHorizontal) 7 - x else x
     val yInPattern = if (flipVertical) 7 - y else y
     val planeOne = ppuMemory.read(baseTable + (index * 16) + yInPattern)
@@ -263,9 +265,10 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   }
 
   private var currentLineSpriteList = List.empty[(Sprite, Int)]
+  var evenFrame = false
 
   def step(): Boolean = {
-    if (currentLine == -1) {
+    if (currentLine == 0) {
       if (currentX == 0) {
         vblankFlag = false
       }
@@ -275,12 +278,13 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       }
     }
 
-    if (currentLine >= 0 && currentLine < 240) {
+    if (currentLine > 0 && currentLine <= 240) {
+      val pixelX = currentX - 1
+      val pixelY = currentLine - 1
+
       if (currentX == 0) {
-        currentLineSpriteList = currentSprites.filter(_._1.containsY(currentLine))
+        currentLineSpriteList = currentSprites.filter(_._1.containsY(pixelY))
       } else if (currentX >= 1 && currentX <= 256) {
-        val pixelX = currentX - 1
-        val pixelY = currentLine
         val spritePixel = getSpritePixelAt(pixelX, pixelY, currentLineSpriteList)
         val color =
           spritePixel
@@ -306,7 +310,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       }
     }
 
-    val didDraw = if (currentLine == 240 && currentX == 1) {
+    val didDraw = if (currentLine == 241 && currentX == 1) {
       vblankFlag = true
       drawFrame(currentImage)
 
@@ -320,13 +324,14 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     } else false
 
     currentX += 1
-    if (currentX > 340) {
+    if (currentX > 340 || (evenFrame && currentLine == 0 && currentX == 340)) {
       currentLine += 1
       currentX = 0
     }
 
-    if (currentLine > 260) { // 261 / -1 is a dummy scanline
-      currentLine = -1
+    if (currentLine > 261) {
+      evenFrame = !evenFrame
+      currentLine = 0
     }
 
     didDraw
