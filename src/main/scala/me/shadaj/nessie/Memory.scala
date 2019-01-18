@@ -219,7 +219,7 @@ class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends Memory
   override def write(address: Int, value: Byte, memory: Memory): Unit = {
     address match {
       case 0x4016 =>
-        if (value == 1) {
+        if ((value & 1) == 1) {
           currentIndex = 0
           incrementIndex = false
         } else {
