@@ -35,11 +35,6 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   private var showSpritesLeft8 = false
   private var showSprites = false
 
-  private val nametableA = Array.fill[Byte](30, 32)(0)
-  private val nametableB = Array.fill[Byte](30, 32)(0)
-  private val attributeA = Array.fill[Byte](8, 8)(0)
-  private val attributeB = Array.fill[Byte](8, 8)(0)
-
   val paletteMemory = new Array[Byte](32)
 
   def universalBackgroundColor = paletteMemory(0)
@@ -86,12 +81,12 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }
 
     override def write(address: Int, value: Byte, memory: Memory): Unit = {
-      val actualAddress = (address - 0x2000) % 8 /* mirroring! */
       if (address == 0x4014) {
         currentOamData = (combineBytes(value, 0) to combineBytes(value, 0xFF.toByte)).map(memory.read).toVector
         updateSprites()
       } else {
-        actualAddress match {
+        val ppuRegister = (address - 0x2000) % 8 /* mirroring! */
+        ppuRegister match {
           case 0x0 =>
             nmiOnBlank = ((value >>> 7) & 1) == 1
             backgroundPatternTable1 = ((value >>> 4) & 1) == 1
@@ -142,20 +137,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
               addrBeforeMirror - 0x800
             } else addrBeforeMirror
 
-            if (addr < 0x2000) {
+            if (addr < 0x3F00) {
               ppuMemory.write(addr, value)
-            } else if (addr >= 0x2000 && addr < (0x2000 + (30 * 32))) {
-              val relative = addr - 0x2000
-              nametableA(relative / 32)(relative % 32) = value
-            } else if (addr >= (0x2000 + (30 * 32)) && addr < 0x2400) {
-              val relative = addr - (0x2000 + (30 * 32))
-              attributeA(relative / 8)(relative % 8) = value
-            } else if (addr >= 0x2400 && addr < (0x2400 + (30 * 32))) {
-              val relative = addr - 0x2400
-              nametableB(relative / 32)(relative % 32) = value
-            } else if (addr >= (0x2400 + (30 * 32)) && addr < 0x2800) {
-              val relative = addr - (0x2400 + (30 * 32))
-              attributeB(relative / 8)(relative % 8) = value
             } else if (addr >= 0x3F00 && addr < 0x3F20) {
               val relativeAddr = addr - 0x3F00
               val mirroredPalette = if (relativeAddr % 4 == 0) {
@@ -238,12 +221,14 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       val relativePixelY = y % 8
 
       val (nametable, attributeTable, tileXInTable) = if (tileIndexX < 32) {
-        (nametableA, attributeA, tileIndexX)
+        (0x2000, 0x23C0, tileIndexX)
       } else {
-        (nametableB, attributeB, tileIndexX - 32)
+        (0x2400, 0x27C0, tileIndexX - 32)
       }
 
-      val patternTileNumber = java.lang.Byte.toUnsignedInt(nametable(tileIndexY)(tileXInTable))
+      val patternTileNumber = java.lang.Byte.toUnsignedInt(
+        ppuMemory.read(nametable + (tileIndexY * 32) + tileXInTable)
+      )
       val paletteIndex = readPattern(
         if (backgroundPatternTable1) 0x1000 else 0x0,
         patternTileNumber,
@@ -252,7 +237,9 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       )
 
       if (paletteIndex != 0) {
-        val attributeValue = attributeTable(tileIndexY / 4)(tileXInTable / 4)
+        val attributeValue = ppuMemory.read(
+          attributeTable + ((tileIndexY / 4) * 8) + (tileXInTable / 4)
+        )
         val xSide = (tileIndexX % 4) / 2
         val ySide = (tileIndexY % 4) / 2
         val shiftNeeded = (xSide + (ySide * 2)) * 2

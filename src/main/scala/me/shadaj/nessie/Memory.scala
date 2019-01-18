@@ -80,19 +80,29 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider w
   }
 
   override val ppuMemory: MemoryProvider = new MemoryProvider {
-    val localChrRom = if (chrRom.length == 0) new Array[Byte](0x2000) else chrRom
-    override def canReadAt(address: Int): Boolean = address < 0x2000
-    override def canWriteAt(address: Int): Boolean = address < localChrRom.length
+    private val localChrRom = if (chrRom.length == 0) new Array[Byte](0x2000) else chrRom
+    private val nametableMemory = new Array[Byte](2048)
+
+    override def canReadAt(address: Int): Boolean = address < 0x3F00
+    override def canWriteAt(address: Int): Boolean = address < 0x3F00
 
     override def read(address: Int, memory: Memory): Byte = {
-      if (address < localChrRom.length) {
-        localChrRom(address)
-      } else 0
+      if (address < 0x2000) {
+        if (address < localChrRom.length) {
+          localChrRom(address)
+        } else 0
+      } else if (address >= 0x2000 && address < 0x3F00) {
+        nametableMemory((address - 0x2000) % 0x800) // vertical mirroring
+      } else ???
     }
 
     override def write(address: Int, value: Byte, memory: Memory): Unit = {
-      // allow writes to support Blargg PPU tests
-      localChrRom(address) = value
+      if (address < 0x2000) {
+        // allow writes to support Blargg PPU tests
+        localChrRom(address) = value
+      } else if (address >= 0x2000 && address < 0x3F00) {
+        nametableMemory((address - 0x2000) % 0x800) = value // vertical mirroring
+      }
     }
   }
 }
@@ -121,16 +131,26 @@ class Mapper1(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider w
   }
 
   override val ppuMemory: MemoryProvider = new MemoryProvider {
-    override def canReadAt(address: Int): Boolean = address < 0x2000
-    override def canWriteAt(address: Int): Boolean = true
+    private val nametableMemory = new Array[Byte](2048)
+
+    override def canReadAt(address: Int): Boolean = address < 0x3F00
+    override def canWriteAt(address: Int): Boolean = address < 0x3F00
 
     override def read(address: Int, memory: Memory): Byte = {
-      if (address < chrRom.length) {
-        chrRom(address)
-      } else 0
+      if (address < 0x2000) {
+        if (address < chrRom.length) {
+          chrRom(address)
+        } else 0
+      } else if (address >= 0x2000 && address < 0x3F00) {
+        nametableMemory((address - 0x2000) % 0x800) // vertical mirroring
+      } else ???
     }
 
-    override def write(address: Int, value: Byte, memory: Memory): Unit = {}
+    override def write(address: Int, value: Byte, memory: Memory): Unit = {
+      if (address < 0x2000) {} else if (address >= 0x2000 && address < 0x3F00) {
+        nametableMemory((address - 0x2000) % 0x800) = value // vertical mirroring
+      }
+    }
   }
 }
 

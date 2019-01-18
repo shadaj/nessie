@@ -40,7 +40,7 @@ object Util {
       currentFrame.zipWithIndex.foreach { case (row, y) =>
         row.zipWithIndex.foreach { case (pixel, x) =>
           val Array(imageR, imageG, imageB) = raster.getPixel(x, y, null: Array[Int])
-          Assertions.assert(imageR == pixel._1 && imageG == pixel._2 && imageB == pixel._3)
+          Assertions.assert(pixel._1 == imageR && pixel._2 == imageG && pixel._3 == imageB)
         }
       }
     }
