@@ -67,12 +67,12 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
           ret
         case 0x7 =>
           val addr = currentPPUAddr
-          val ret = if (addr >= 0x1000 && addr < 0x2000) {
+          val ret = if (addr < 0x3F00) {
             val retByte = vramBuffer
             vramBuffer = ppuMemory.read(addr)
             retByte
           } else {
-            println(f"trying to read ${currentPPUAddr}%X")
+            println(f"trying to read $currentPPUAddr%X")
             0x0.toByte
           }
           currentPPUAddr = currentPPUAddr + (if (incrementAddressDown) 32 else 1) % 0x4000
@@ -132,15 +132,10 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
               currentScrollX = (currentScrollX & 0xFF) | xScrollBase
             }
           case 0x7 =>
-            val addrBeforeMirror = currentPPUAddr 
-            val addr = if (addrBeforeMirror >= 0x2800 && addrBeforeMirror < 0x3000) {
-              addrBeforeMirror - 0x800
-            } else addrBeforeMirror
-
-            if (addr < 0x3F00) {
-              ppuMemory.write(addr, value)
-            } else if (addr >= 0x3F00 && addr < 0x3F20) {
-              val relativeAddr = addr - 0x3F00
+            if (currentPPUAddr < 0x3F00) {
+              ppuMemory.write(currentPPUAddr, value)
+            } else if (currentPPUAddr >= 0x3F00 && currentPPUAddr < 0x3F20) {
+              val relativeAddr = currentPPUAddr - 0x3F00
               val mirroredPalette = if (relativeAddr % 4 == 0) {
                 relativeAddr % 0x10
               } else relativeAddr
@@ -215,19 +210,31 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   def getBackgroundPixelAt(x: Int, y: Int) = {
     if (!showBackground || (!showBackgroundLeft8 && x < 8)) None else {
       val xWithScroll = (x + currentScrollX) % (256 * 2)
+      val yWithScroll = (y + currentScrollY) % (240 * 2)
       val tileIndexX = xWithScroll / 8
-      val tileIndexY = y / 8
+      val tileIndexY = yWithScroll / 8
       val relativePixelX = xWithScroll % 8
-      val relativePixelY = y % 8
+      val relativePixelY = yWithScroll % 8
 
-      val (nametable, attributeTable, tileXInTable) = if (tileIndexX < 32) {
-        (0x2000, 0x23C0, tileIndexX)
-      } else {
-        (0x2400, 0x27C0, tileIndexX - 32)
-      }
+      val (nametable, tileXInTable, tileYInTable) =
+        if (tileIndexY < 30) {
+          if (tileIndexX < 32) {
+            (0x2000, tileIndexX, tileIndexY)
+          } else {
+            (0x2400, tileIndexX - 32, tileIndexY)
+          }
+        } else {
+          if (tileIndexX < 32) {
+            (0x2800, tileIndexX, tileIndexY - 30)
+          } else {
+            (0x2C00, tileIndexX - 32, tileIndexY - 30)
+          }
+        }
+
+      val attributeTable = nametable + 0x3C0
 
       val patternTileNumber = java.lang.Byte.toUnsignedInt(
-        ppuMemory.read(nametable + (tileIndexY * 32) + tileXInTable)
+        ppuMemory.read(nametable + (tileYInTable * 32) + tileXInTable)
       )
       val paletteIndex = readPattern(
         if (backgroundPatternTable1) 0x1000 else 0x0,
@@ -238,7 +245,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
 
       if (paletteIndex != 0) {
         val attributeValue = ppuMemory.read(
-          attributeTable + ((tileIndexY / 4) * 8) + (tileXInTable / 4)
+          attributeTable + ((tileYInTable / 4) * 8) + (tileXInTable / 4)
         )
         val xSide = (tileIndexX % 4) / 2
         val ySide = (tileIndexY % 4) / 2

@@ -10,7 +10,11 @@ class CPUSuite extends FunSuite {
   private val nestest = NESFile.fromFile(new File("test-roms/nestest.nes"))
 
   test("Can run nestest ROM through invalid opcodes (0xA3)") {
-    val memory = new Memory(Seq(new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping, new Mapper0(nestest.programRom, nestest.chrRom)))
+    val memory = new Memory(Seq(
+      new NESRam, new PPU(null, null, _ => {}).cpuMemoryMapping,
+      new Mapper0(nestest.programRom, nestest.chrRom, nestest.verticalMirror)
+    ))
+
     val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000

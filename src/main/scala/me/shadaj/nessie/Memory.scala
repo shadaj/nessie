@@ -56,7 +56,7 @@ class NESRam extends MemoryProvider {
   }
 }
 
-class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider with PPUMemoryProvider  {
+class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte], verticalMirror: Boolean) extends MemoryProvider with PPUMemoryProvider  {
   override def canReadAt(address: Int): Boolean = address >= 0x8000
   override def canWriteAt(address: Int): Boolean = false
 
@@ -92,7 +92,17 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider w
           localChrRom(address)
         } else 0
       } else if (address >= 0x2000 && address < 0x3F00) {
-        nametableMemory((address - 0x2000) % 0x800) // vertical mirroring
+        nametableMemory({
+          if (!verticalMirror) {
+            if (address >= 0x800) {
+              0x400 + (address % 0x400)
+            } else {
+              address % 0x400
+            }
+          } else {
+            (address - 0x2000) % 0x800
+          }
+        })
       } else ???
     }
 
@@ -101,7 +111,17 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte]) extends MemoryProvider w
         // allow writes to support Blargg PPU tests
         localChrRom(address) = value
       } else if (address >= 0x2000 && address < 0x3F00) {
-        nametableMemory((address - 0x2000) % 0x800) = value // vertical mirroring
+        nametableMemory({
+          if (!verticalMirror) {
+            if (address >= 0x800) {
+              0x400 + (address % 0x400)
+            } else {
+              address % 0x400
+            }
+          } else {
+            (address - 0x2000) % 0x800 // vertical mirroring
+          }
+        }) = value
       }
     }
   }

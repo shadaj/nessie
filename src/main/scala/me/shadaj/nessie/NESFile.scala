@@ -5,7 +5,7 @@ import java.nio.file.Files
 
 import scala.collection.mutable
 
-case class NESFile(programRom: Array[Byte], chrRom: Array[Byte], mapperNumber: Short) {
+case class NESFile(programRom: Array[Byte], chrRom: Array[Byte], mapperNumber: Short, verticalMirror: Boolean) {
 }
 
 object NESFile {
@@ -26,7 +26,7 @@ object NESFile {
 
     val (prgRom, afterPrg) = afterHeader.splitAt(prgRomSize)
 
-    NESFile(prgRom, afterPrg.take(chrRomSize), mapperNumber.toShort)
+    NESFile(prgRom, afterPrg.take(chrRomSize), mapperNumber.toShort, (flagsSix & 1) == 1)
   }
 
   def fromFile(file: File): NESFile = fromBytes(Files.readAllBytes(file.toPath))
