@@ -10,23 +10,25 @@ case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes:
   def aboveBackground: Boolean = (attributes & 0x20) == 0
 }
 
-class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
-  private var oamAddress: Int = 0x0
-  private var nmiOnBlank: Boolean = false
-  private var incrementAddressDown: Boolean = false
-  private var xScrollShifted: Boolean = false
-  private var yScrollShifted: Boolean = false
-  private var settingPPUHigh: Boolean = true
-  private var currentPPUAddr: Int = 0
+final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, Int, Int)]] => Unit) {
+  import PPU._
+
+  private var oamAddress = 0x0
+  private var nmiOnBlank = false
+  private var incrementAddressDown = false
+  private var xScrollShifted = false
+  private var yScrollShifted = false
+  private var settingPPUHigh = true
+  private var currentPPUAddr = 0
 
   private var vblankFlag = false
 
   private var settingScrollX = true
-  private var currentScrollX: Int = 0
-  private var currentScrollY: Int = 0
+  private var currentScrollX = 0
+  private var currentScrollY = 0
 
-  private var currentOamData: Vector[Byte] = Vector.fill[Byte](64 * 4)(0)
-  private var currentSprites: List[(Sprite, Int)] = List.empty
+  private var currentOamData = Vector.fill[Byte](64 * 4)(0)
+  private var currentSprites = List.empty[(Sprite, Int)]
   private var backgroundPatternTable1 = false
   private var spriteZeroHit = false
 
@@ -35,11 +37,11 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   private var showSpritesLeft8 = false
   private var showSprites = false
 
-  val paletteMemory = new Array[Byte](32)
+  private val paletteMemory = new Array[Byte](32)
 
-  def universalBackgroundColor = paletteMemory(0)
+  private def universalBackgroundColor = paletteMemory(0)
 
-  def updateSprites(): Unit = {
+  private def updateSprites(): Unit = {
     currentSprites = currentOamData.grouped(4).map { spriteData =>
       Sprite(
         java.lang.Byte.toUnsignedInt(spriteData.last),
@@ -52,7 +54,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
 
   private var lastWrite: Byte = 0
 
-  val cpuMemoryMapping = new MemoryProvider {
+  val cpuMemoryMapping: MemoryProvider = new MemoryProvider {
     override def canReadAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
     override def canWriteAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
 
@@ -153,18 +155,11 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }
   }
 
-  var currentLine = -1 // dummy scanline
-  var currentX = 0
+  private var currentLine = -1 // dummy scanline
+  private var currentX = 0
   private val currentImage = Array.fill(240, 256)((0, 0, 0))
 
-  val nesToRGB = """ 84  84  84    0  30 116    8  16 144   48   0 136   68   0 100   92   0  48   84   4   0   60  24   0   32  42   0    8  58   0    0  64   0    0  60   0    0  50  60    0   0   0 0 0 0 0 0 0
-                   |152 150 152    8  76 196   48  50 236   92  30 228  136  20 176  160  20 100  152  34  32  120  60   0   84  90   0   40 114   0    8 124   0    0 118  40    0 102 120    0   0   0 0 0 0 0 0 0
-                   |236 238 236   76 154 236  120 124 236  176  98 236  228  84 236  236  88 180  236 106 100  212 136  32  160 170   0  116 196   0   76 208  32   56 204 108   56 180 204   60  60  60 0 0 0 0 0 0
-                   |236 238 236  168 204 236  188 188 236  212 178 236  236 174 236  236 174 212  236 180 176  228 196 144  204 210 120  180 222 120  168 226 144  152 226 180  160 214 228  160 162 160 0 0 0 0 0 0"""
-    .stripMargin.split('\n').flatMap(_.split(' ')).filterNot(_.isEmpty).map(_.toInt)
-    .grouped(3).map(a => (a(0), a(1), a(2))).toArray
-
-  def readPattern(baseTable: Int, index: Int,
+  private def readPattern(baseTable: Int, index: Int,
                   x: Int, y: Int,
                   flipVertical: Boolean = false, flipHorizontal: Boolean = false): Int = {
     val xInPattern = if (flipHorizontal) 7 - x else x
@@ -174,7 +169,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     (((planeTwo >>> (7 - xInPattern)) & 1) << 1) | ((planeOne >>> (7 - xInPattern)) & 1)
   }
 
-  def getSpritePixelAt(x: Int, y: Int, spriteList: List[(Sprite, Int)]) = {
+  private def getSpritePixelAt(x: Int, y: Int,
+                               spriteList: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int), Sprite)] = {
     def searchForSprite(list: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int), Sprite)] = {
       if (list.isEmpty) {
         None
@@ -208,9 +204,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }
   }
 
-  var lastFrameTime = System.currentTimeMillis()
-
-  def getBackgroundPixelAt(x: Int, y: Int) = {
+  def getBackgroundPixelAt(x: Int, y: Int): Option[(Int, Int, Int)] = {
     if (!showBackground || (!showBackgroundLeft8 && x < 8)) None else {
       val xWithScroll = (x + currentScrollX) % (256 * 2)
       val yWithScroll = (y + currentScrollY) % (240 * 2)
@@ -262,10 +256,10 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
   }
 
   private var currentLineSpriteList = List.empty[(Sprite, Int)]
-  var evenFrame = false
+  private var evenFrame = false
 
   def step(): Boolean = {
-    if (currentLine == 0) {
+    val didDraw = if (currentLine == -1) {
       if (currentX == 0) {
         vblankFlag = false
       }
@@ -273,11 +267,11 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       if (currentX == 1) {
         spriteZeroHit = false
       }
-    }
 
-    if (currentLine > 0 && currentLine <= 240) {
+      false
+    } else if (currentLine < 240) {
       val pixelX = currentX - 1
-      val pixelY = currentLine - 1
+      val pixelY = currentLine
 
       if (currentX == 0) {
         currentLineSpriteList = currentSprites.filter(_._1.containsY(pixelY))
@@ -305,13 +299,11 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
 
         currentImage(pixelY)(pixelX) = color
       }
-    }
 
-    val didDraw = if (currentLine == 240 && currentX == 1) {
+      false
+    } else if (currentLine == 240 && currentX == 1) {
       vblankFlag = true
       drawFrame(currentImage)
-
-      lastFrameTime = System.currentTimeMillis()
 
       if (nmiOnBlank) {
         runNMI()
@@ -323,7 +315,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }
 
     currentX += 1
-    if (currentX > 340 || (evenFrame && currentLine == -1 && currentX == 340)) {
+    if (currentX == 341 || (evenFrame && currentLine == -1 && currentX == 340)) {
       currentLine += 1
       currentX = 0
     }
@@ -335,4 +327,13 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
 
     didDraw
   }
+}
+
+object PPU {
+  private val nesToRGB = """ 84  84  84    0  30 116    8  16 144   48   0 136   68   0 100   92   0  48   84   4   0   60  24   0   32  42   0    8  58   0    0  64   0    0  60   0    0  50  60    0   0   0 0 0 0 0 0 0
+                           |152 150 152    8  76 196   48  50 236   92  30 228  136  20 176  160  20 100  152  34  32  120  60   0   84  90   0   40 114   0    8 124   0    0 118  40    0 102 120    0   0   0 0 0 0 0 0 0
+                           |236 238 236   76 154 236  120 124 236  176  98 236  228  84 236  236  88 180  236 106 100  212 136  32  160 170   0  116 196   0   76 208  32   56 204 108   56 180 204   60  60  60 0 0 0 0 0 0
+                           |236 238 236  168 204 236  188 188 236  212 178 236  236 174 236  236 174 212  236 180 176  228 196 144  204 210 120  180 222 120  168 226 144  152 226 180  160 214 228  160 162 160 0 0 0 0 0 0"""
+    .stripMargin.split('\n').flatMap(_.split(' ')).filterNot(_.isEmpty).map(_.toInt)
+    .grouped(3).map(a => (a(0), a(1), a(2))).toArray
 }
