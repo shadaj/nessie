@@ -15,7 +15,7 @@ class CPUSuite extends FunSuite {
       new Mapper0(nestest.programRom, nestest.chrRom, nestest.verticalMirror)
     ))
 
-    val cpu = new CPU(memory)
+    lazy val cpu = new CPU(memory)
 
     cpu.programCounter = 0xC000
 

@@ -57,7 +57,7 @@ class NESRam extends MemoryProvider {
 }
 
 class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte], verticalMirror: Boolean) extends MemoryProvider with PPUMemoryProvider  {
-  override def canReadAt(address: Int): Boolean = address >= 0x8000
+  override def canReadAt(address: Int): Boolean = address >= 0x4020
   override def canWriteAt(address: Int): Boolean = false
 
   override def read(address: Int, memory: Memory): Byte = {
@@ -71,7 +71,7 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte], verticalMirror: Boolean)
         prgRom(address - 0xC000)
       }
     } else {
-      throw new IllegalArgumentException(s"Cannot read program ROM at address $address")
+      0xFF.toByte
     }
   }
 
@@ -94,11 +94,7 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte], verticalMirror: Boolean)
       } else if (address >= 0x2000 && address < 0x3F00) {
         nametableMemory({
           if (!verticalMirror) {
-            if (address >= 0x800) {
-              0x400 + (address % 0x400)
-            } else {
-              address % 0x400
-            }
+            (if (address >= 0x2800) 0x400 else 0) + (address % 0x400)
           } else {
             (address - 0x2000) % 0x800
           }
@@ -113,11 +109,7 @@ class Mapper0(prgRom: Array[Byte], chrRom: Array[Byte], verticalMirror: Boolean)
       } else if (address >= 0x2000 && address < 0x3F00) {
         nametableMemory({
           if (!verticalMirror) {
-            if (address >= 0x800) {
-              0x400 + (address % 0x400)
-            } else {
-              address % 0x400
-            }
+            (if (address >= 0x2800) 0x400 else 0) + (address % 0x400)
           } else {
             (address - 0x2000) % 0x800 // vertical mirroring
           }

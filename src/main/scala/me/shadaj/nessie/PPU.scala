@@ -50,6 +50,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }.zipWithIndex.toList
   }
 
+  private var lastWrite: Byte = 0
+
   val cpuMemoryMapping = new MemoryProvider {
     override def canReadAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
     override def canWriteAt(address: Int): Boolean = (address >= 0x2000 && address < 0x4000) || address == 0x4014
@@ -58,13 +60,13 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     override def read(address: Int, memory: Memory): Byte = {
       val actualAddress = (address - 0x2000) % 8 /* mirroring! */
       actualAddress match {
+        case 0x1 => 0
         case 0x2 =>
           val ret = ((if (vblankFlag) 1 else 0) << 7 |
            (if (spriteZeroHit) 1 else 0) << 6).toByte
 
           vblankFlag = false
-
-          ret
+          (ret | (lastWrite & 31).toByte).toByte
         case 0x7 =>
           val addr = currentPPUAddr
           val ret = if (addr < 0x3F00) {
@@ -86,6 +88,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
         updateSprites()
       } else {
         val ppuRegister = (address - 0x2000) % 8 /* mirroring! */
+        lastWrite = value
         ppuRegister match {
           case 0x0 =>
             nmiOnBlank = ((value >>> 7) & 1) == 1
@@ -150,8 +153,8 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
     }
   }
 
-  private var currentLine = -1 // dummy scanline
-  private var currentX = 0
+  var currentLine = -1 // dummy scanline
+  var currentX = 0
   private val currentImage = Array.fill(240, 256)((0, 0, 0))
 
   val nesToRGB = """ 84  84  84    0  30 116    8  16 144   48   0 136   68   0 100   92   0  48   84   4   0   60  24   0   32  42   0    8  58   0    0  64   0    0  60   0    0  50  60    0   0   0 0 0 0 0 0 0
@@ -304,7 +307,7 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       }
     }
 
-    val didDraw = if (currentLine == 241 && currentX == 1) {
+    val didDraw = if (currentLine == 240 && currentX == 1) {
       vblankFlag = true
       drawFrame(currentImage)
 
@@ -315,17 +318,19 @@ class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(Int, In
       }
 
       true
-    } else false
+    } else {
+      false
+    }
 
     currentX += 1
-    if (currentX > 340 || (evenFrame && currentLine == 0 && currentX == 340)) {
+    if (currentX > 340 || (evenFrame && currentLine == -1 && currentX == 340)) {
       currentLine += 1
       currentX = 0
     }
 
-    if (currentLine > 261) {
+    if (currentLine == 261) {
       evenFrame = !evenFrame
-      currentLine = 0
+      currentLine = -1
     }
 
     didDraw

@@ -34,7 +34,7 @@ class CPU(val memory: Memory) {
   }
 
   def tick(log: Boolean): Int = {
-    val handleInterruptCycles = interruptAddress.map { a =>
+    interruptAddress.map { a =>
       interruptAddress = None
       val addressToPush = programCounter
       Instruction.pushToStack((addressToPush >> 8).toByte, this)
@@ -46,20 +46,20 @@ class CPU(val memory: Memory) {
       interruptDisable = true
 
       7
-    }.getOrElse(0)
+    }.getOrElse {
+      val instructionOpcode = memory.read(programCounter)
+      val (currentInstruction, parser) = Instruction.cpuInstructions.getOrElse(instructionOpcode, {
+        throw new IllegalArgumentException(s"Unknown instruction: ${memory.read(programCounter).formatted("0x%x")}")
+      })
 
-    val instructionOpcode = memory.read(programCounter)
-    val (currentInstruction, parser) = Instruction.cpuInstructions.getOrElse(instructionOpcode, {
-      throw new IllegalArgumentException(s"Unknown instruction: ${memory.read(programCounter).formatted("0x%x")}")
-    })
-
-    val currentCounter = programCounter
-    if (log) {
-      print(programCounter.formatted("%x").toUpperCase + " ")
+      val currentCounter = programCounter
+      if (log) {
+        print(programCounter.formatted("%x").toUpperCase + " ")
+      }
+      programCounter += parser.size + 1
+      val parsedArgs = parser.parse(i => memory.read(currentCounter + 1 + i), this)
+      currentInstruction.run(parsedArgs, log)(this)
     }
-    programCounter += parser.size + 1
-    val parsedArgs = parser.parse(i => memory.read(currentCounter + 1 + i), this)
-    handleInterruptCycles + currentInstruction.run(parsedArgs, log)(this)
   }
 
   def tick: Int = tick(false)
