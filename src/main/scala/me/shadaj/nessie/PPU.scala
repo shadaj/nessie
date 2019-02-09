@@ -207,7 +207,9 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   def getBackgroundPixelAt(x: Int, y: Int): Option[(Int, Int, Int)] = {
     if (!showBackground || (!showBackgroundLeft8 && x < 8)) None else {
       val xWithScroll = (x + currentScrollX) % (256 * 2)
-      val yWithScroll = (y + currentScrollY) % (240 * 2)
+      val yWithScroll = (y + currentScrollY +
+        (if ((currentScrollY / 8) >= 31) -8 * 2 else 0) // not sure why, but it works?
+      ) % (240 * 2)
       val tileIndexX = xWithScroll / 8
       val tileIndexY = yWithScroll / 8
       val relativePixelX = xWithScroll % 8
@@ -259,6 +261,9 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   private var evenFrame = false
 
   def step(): Boolean = {
+    if (currentX == 0) {
+      println((currentScrollY / 8))
+    }
     val didDraw = if (currentLine == -1) {
       if (currentX == 0) {
         vblankFlag = false
