@@ -11,7 +11,7 @@ object Util {
     var currentFrame: Array[Array[(Int, Int, Int)]] = null
     val console = new Console(file, a => {
       currentFrame = a
-    }, () => Seq.fill(5)(false), memoryProviders)
+    }, () => Seq.fill(8)(false), memoryProviders)
 
     (1 to frame).foreach { f =>
       while (!console.tick()) {}

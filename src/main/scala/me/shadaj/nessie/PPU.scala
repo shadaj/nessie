@@ -69,6 +69,11 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
            (if (spriteZeroHit) 1 else 0) << 6).toByte
 
           vblankFlag = false
+
+          // reset latches
+          settingScrollX = true
+          settingPPUHigh = true
+
           (ret | (lastWrite & 31).toByte).toByte
         case 0x7 =>
           val addr = currentPPUAddr
