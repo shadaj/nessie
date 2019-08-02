@@ -1,7 +1,7 @@
 package me.shadaj.nessie
 
 class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, currentButtonState: () => Seq[Boolean], extraMemoryProviders: Seq[MemoryProvider] = Seq.empty) {
-  println(file.mapperNumber)
+  println(s"Mapper: ${file.mapperNumber}")
   private val memoryProviders = Seq(
     new NESRam,
     new APUIORegisters,

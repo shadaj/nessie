@@ -29,6 +29,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
 
   private var currentOamData = Vector.fill[Byte](64 * 4)(0)
   private var currentSprites = List.empty[(Sprite, Int)]
+  private var spritePatternTable1 = false
   private var backgroundPatternTable1 = false
   private var spriteZeroHit = false
 
@@ -95,6 +96,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
           case 0x0 =>
             nmiOnBlank = ((value >>> 7) & 1) == 1
             backgroundPatternTable1 = ((value >>> 4) & 1) == 1
+            spritePatternTable1 = ((value >>> 3) & 1) == 1
             incrementAddressDown = ((value >>> 2) & 1) == 1
             xScrollShifted = ((value >>> 0) & 1) == 1
             yScrollShifted = ((value >>> 1) & 1) == 1
@@ -174,7 +176,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
     def searchForSprite(list: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int), Sprite)] = {
       if (list.isEmpty) {
         None
-      } else if (list.head._1.isVisible && list.head._1.contains(x, y)) {
+      } else if (list.head._1.isVisible && list.head._1.contains(x, y) && list.head._1.yPosition > 1) {
         val s = list.head._1
         val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
         val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
@@ -182,7 +184,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
         val relativePixelY = y - s.yPosition
 
         val paletteIndex = readPattern(
-          0x0, s.patternIndex,
+          if (spritePatternTable1) 0x1000 else 0x0, s.patternIndex,
           relativePixelX, relativePixelY,
           shouldFlipVertically, shouldFlipHorizontally
         )
@@ -261,9 +263,6 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   private var evenFrame = false
 
   def step(): Boolean = {
-    if (currentX == 0) {
-      println((currentScrollY / 8))
-    }
     val didDraw = if (currentLine == -1) {
       if (currentX == 0) {
         vblankFlag = false
