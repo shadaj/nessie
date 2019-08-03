@@ -16,8 +16,6 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   private var oamAddress = 0x0
   private var nmiOnBlank = false
   private var incrementAddressDown = false
-  private var xScrollShifted = false
-  private var yScrollShifted = false
   private var settingPPUHigh = true
   private var currentPPUAddr = 0
 
@@ -39,6 +37,9 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   private var showSprites = false
 
   private val paletteMemory = new Array[Byte](32)
+
+  private var baseNametableX = 0
+  private var baseNametableY = 0
 
   private def universalBackgroundColor = paletteMemory(0)
 
@@ -103,11 +104,9 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
             backgroundPatternTable1 = ((value >>> 4) & 1) == 1
             spritePatternTable1 = ((value >>> 3) & 1) == 1
             incrementAddressDown = ((value >>> 2) & 1) == 1
-            xScrollShifted = ((value >>> 0) & 1) == 1
-            yScrollShifted = ((value >>> 1) & 1) == 1
 
-            currentScrollX = (currentScrollX & 0xFF) | (if (xScrollShifted) 256 else 0)
-            currentScrollY = (currentScrollY & 0xFF) | (if (yScrollShifted) 256 else 0)
+            baseNametableX = ((value >>> 0) & 1)
+            baseNametableY = ((value >>> 1) & 1)
           case 0x1 =>
             showBackgroundLeft8 = ((value >>> 1) & 1) == 1
             showSpritesLeft8 = ((value >>> 2) & 1) == 1
@@ -125,10 +124,10 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
             oamAddress = (oamAddress + 1) % 256
           case 0x5 =>
             if (settingScrollX) {
-              currentScrollX = (currentScrollX & 0xFF00) | java.lang.Byte.toUnsignedInt(value)
+              currentScrollX = java.lang.Byte.toUnsignedInt(value)
               settingScrollX = false
             } else {
-              currentScrollY = (currentScrollY & 0xFF00) | java.lang.Byte.toUnsignedInt(value)
+              currentScrollY = java.lang.Byte.toUnsignedInt(value)
               settingScrollX = true
             }
           case 0x6 =>
@@ -213,30 +212,25 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
 
   def getBackgroundPixelAt(x: Int, y: Int): Option[(Int, Int, Int)] = {
     if (!showBackground || (!showBackgroundLeft8 && x < 8)) None else {
-      val xWithScroll = (x + currentScrollX) % (256 * 2)
-      val yWithScroll = (y + currentScrollY +
-        (if ((currentScrollY / 8) >= 31) -8 * 2 else 0) // not sure why, but it works?
-      ) % (240 * 2)
-      val tileIndexX = xWithScroll / 8
-      val tileIndexY = yWithScroll / 8
-      val relativePixelX = xWithScroll % 8
-      val relativePixelY = yWithScroll % 8
+      val xWithScroll = (currentScrollX + x) % (256 * 2)
 
-      val (nametable, tileXInTable, tileYInTable) =
-        if (tileIndexY < 30) {
-          if (tileIndexX < 32) {
-            (0x2000, tileIndexX, tileIndexY)
-          } else {
-            (0x2400, tileIndexX - 32, tileIndexY)
-          }
+      val scrollTileY = (currentScrollY + y + baseNametableY * 240) / 8
+      val tileYInTable = scrollTileY % 30
+      val nametableYShift = if ((scrollTileY / 30) % 2 == 0) 0 else 2
+
+      val tileIndexX = xWithScroll / 8
+
+      val relativePixelX = xWithScroll % 8
+      val relativePixelY = (currentScrollY + y) % 8
+
+      val (nametableXShift, tileXInTable) =
+        if (tileIndexX < 32) {
+          (0, tileIndexX)
         } else {
-          if (tileIndexX < 32) {
-            (0x2800, tileIndexX, tileIndexY - 30)
-          } else {
-            (0x2C00, tileIndexX - 32, tileIndexY - 30)
-          }
+          (1, tileIndexX - 32)
         }
 
+      val nametable = 0x2000 + (nametableYShift + nametableXShift) * 0x400
       val attributeTable = nametable + 0x3C0
 
       val patternTileNumber = java.lang.Byte.toUnsignedInt(
@@ -254,7 +248,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
           attributeTable + ((tileYInTable / 4) * 8) + (tileXInTable / 4)
         )
         val xSide = (tileIndexX % 4) / 2
-        val ySide = (tileIndexY % 4) / 2
+        val ySide = (tileYInTable % 4) / 2
         val shiftNeeded = (xSide + (ySide * 2)) * 2
         val basePaletteAddress = (java.lang.Byte.toUnsignedInt((attributeValue >>> shiftNeeded).toByte) % 4) << 2
         Some(nesToRGB(paletteMemory(basePaletteAddress | paletteIndex)))
@@ -284,7 +278,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
 
       if (currentX == 0) {
         currentLineSpriteList = currentSprites.filter(_._1.containsY(pixelY))
-      } else if (currentX >= 1 && currentX <= 256) {
+      } else if (currentX >= 1 && currentX <= 256 && currentScrollY <= 240) { // TODO: handle negative scroll
         val spritePixel = getSpritePixelAt(pixelX, pixelY, currentLineSpriteList)
         val color =
           spritePixel
@@ -312,6 +306,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
       false
     } else if (currentLine == 240 && currentX == 1) {
       vblankFlag = true
+
       drawFrame(currentImage)
 
       if (nmiOnBlank) {

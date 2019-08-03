@@ -9,3 +9,5 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.1.0-SNAP6"
 libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
 
 fork in run := true
+
+connectInput in run := true
