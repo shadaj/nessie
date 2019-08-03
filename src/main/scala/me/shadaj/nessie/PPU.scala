@@ -47,7 +47,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
     currentSprites = currentOamData.grouped(4).map { spriteData =>
       Sprite(
         java.lang.Byte.toUnsignedInt(spriteData.last),
-        java.lang.Byte.toUnsignedInt(spriteData.head) + 1 /* off by one? */,
+        java.lang.Byte.toUnsignedInt(spriteData.head) + 1 /* sprites are delayed by one line */,
         java.lang.Byte.toUnsignedInt(spriteData(1)),
         java.lang.Byte.toUnsignedInt(spriteData(2))
       )
@@ -162,7 +162,8 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
 
   private var currentLine = -1 // dummy scanline
   private var currentX = 0
-  private val currentImage = Array.fill(240, 256)((0, 0, 0))
+  private var currentImage = Array.fill(240, 256)((0, 0, 0))
+  private var currentImageOther = Array.fill(240, 256)((0, 0, 0))
 
   private def readPattern(baseTable: Int, index: Int,
                   x: Int, y: Int,
@@ -302,6 +303,10 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
       vblankFlag = true
 
       drawFrame(currentImage)
+
+      val prevCurrentImage = currentImage
+      currentImage = currentImageOther
+      currentImageOther = prevCurrentImage
 
       if (nmiOnBlank) {
         runNMI()
