@@ -139,8 +139,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
               settingPPUHigh = true
 
               val addr = currentPPUAddr & 0x07FF
-              val xScrollBase = if (addr < 0x400) 0 else 256
-              currentScrollX = (currentScrollX & 0xFF) | xScrollBase
+              baseNametableX = if (addr < 0x400) 0 else 1
             }
           case 0x7 =>
             if (currentPPUAddr < 0x3F00) {
@@ -218,17 +217,12 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
       val tileYInTable = scrollTileY % 30
       val nametableYShift = if ((scrollTileY / 30) % 2 == 0) 0 else 2
 
-      val tileIndexX = xWithScroll / 8
+      val scrollTileX = (currentScrollX + x + baseNametableX * 256) / 8
+      val tileXInTable = scrollTileX % 32
+      val nametableXShift = (scrollTileX / 32) % 2
 
-      val relativePixelX = xWithScroll % 8
+      val relativePixelX = (currentScrollX + x) % 8
       val relativePixelY = (currentScrollY + y) % 8
-
-      val (nametableXShift, tileXInTable) =
-        if (tileIndexX < 32) {
-          (0, tileIndexX)
-        } else {
-          (1, tileIndexX - 32)
-        }
 
       val nametable = 0x2000 + (nametableYShift + nametableXShift) * 0x400
       val attributeTable = nametable + 0x3C0
@@ -247,7 +241,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
         val attributeValue = ppuMemory.read(
           attributeTable + ((tileYInTable / 4) * 8) + (tileXInTable / 4)
         )
-        val xSide = (tileIndexX % 4) / 2
+        val xSide = (tileXInTable % 4) / 2
         val ySide = (tileYInTable % 4) / 2
         val shiftNeeded = (xSide + (ySide * 2)) * 2
         val basePaletteAddress = (java.lang.Byte.toUnsignedInt((attributeValue >>> shiftNeeded).toByte) % 4) << 2
