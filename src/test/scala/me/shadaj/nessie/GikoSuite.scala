@@ -23,4 +23,13 @@ class GikoSuite extends FunSuite {
       new File("test-frames/giko/giko011-1.png")
     )
   }
+
+  test("Can run giko016 test ROM") {
+    (1 to 10).foreach { t =>
+      Util.checkNthFrame(
+        NESFile.fromFile(new File("test-roms/giko/giko016.nes")), 60 * t,
+        new File(s"test-frames/giko/giko016-$t.png")
+      )
+    }
+  }
 }
