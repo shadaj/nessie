@@ -33,9 +33,9 @@ class PPUSpriteHitSuite extends FunSuite {
   //   Util.runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/07-screen_bottom.nes")))
   // }
 
-  // test("Can run ppu_sprite_hit/08-double_height test ROM") {
-  //   Util.runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/08-double_height.nes")))
-  // }
+  test("Can run ppu_sprite_hit/08-double_height test ROM") {
+    Util.runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/08-double_height.nes")))
+  }
 
   // test("Can run ppu_sprite_hit/09-timing test ROM") {
   //   Util.runTestROM(NESFile.fromFile(new File("test-roms/ppu_sprite_hit/rom_singles/09-timing.nes")))

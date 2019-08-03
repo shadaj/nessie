@@ -9,6 +9,7 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
     file.mapperNumber match {
       case 0 => new Mapper0(file.programRom, file.chrRom, file.verticalMirror)
       case 1 => new Mapper1(file.programRom, file.chrRom)
+      case 2 => new Mapper2(file.programRom)
     }
   ) ++ extraMemoryProviders
 

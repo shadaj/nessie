@@ -2,10 +2,10 @@ package me.shadaj.nessie
 
 case class Sprite(xPosition: Int, yPosition: Int, patternIndex: Int, attributes: Int) {
   def isVisible: Boolean = yPosition < 240
-  def contains(x: Int, y: Int): Boolean =
-    x >= xPosition && x < (xPosition + 8) && containsY(y)
-  def containsY(y: Int): Boolean =
-    y >= yPosition && y < (yPosition + 8)
+  def contains(x: Int, y: Int, is8x16: Boolean): Boolean =
+    x >= xPosition && x < (xPosition + 8) && containsY(y, is8x16)
+  def containsY(y: Int, is8x16: Boolean): Boolean =
+    y >= yPosition && y < (yPosition + (if (is8x16) 16 else 8))
 
   def aboveBackground: Boolean = (attributes & 0x20) == 0
 }
@@ -18,6 +18,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
   private var incrementAddressDown = false
   private var settingPPUHigh = true
   private var currentPPUAddr = 0
+  private var spriteIs8x16 = false
 
   private var vblankFlag = false
 
@@ -101,6 +102,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
         ppuRegister match {
           case 0x0 =>
             nmiOnBlank = ((value >>> 7) & 1) == 1
+            spriteIs8x16 = ((value >>> 5) & 1) == 1
             backgroundPatternTable1 = ((value >>> 4) & 1) == 1
             spritePatternTable1 = ((value >>> 3) & 1) == 1
             incrementAddressDown = ((value >>> 2) & 1) == 1
@@ -180,16 +182,32 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
     def searchForSprite(list: List[(Sprite, Int)]): Option[(Int, (Int, Int, Int), Sprite)] = {
       if (list.isEmpty) {
         None
-      } else if (list.head._1.isVisible && list.head._1.contains(x, y) && list.head._1.yPosition > 1) {
+      } else if (list.head._1.isVisible && list.head._1.contains(x, y, spriteIs8x16) && list.head._1.yPosition > 1) {
         val s = list.head._1
         val shouldFlipVertically = ((s.attributes >>> 7) & 1) == 1
         val shouldFlipHorizontally = ((s.attributes >>> 6) & 1) == 1
         val relativePixelX = x - s.xPosition
         val relativePixelY = y - s.yPosition
 
+        val patternTableToRead = if (spriteIs8x16) {
+          if ((s.patternIndex & 1) == 1) 0x1000 else 0x0
+        } else {
+          if (spritePatternTable1) 0x1000 else 0x0
+        }
+
+        val (indexToRead, yToRead) = if (spriteIs8x16) {
+          if (relativePixelY < 8) {
+            ((s.patternIndex >> 1) << 1, relativePixelY)
+          } else {
+            (((s.patternIndex >> 1) << 1) + 1, relativePixelY - 8)
+          }
+        } else {
+          (s.patternIndex, relativePixelY)
+        }
+
         val paletteIndex = readPattern(
-          if (spritePatternTable1) 0x1000 else 0x0, s.patternIndex,
-          relativePixelX, relativePixelY,
+          patternTableToRead, indexToRead,
+          relativePixelX, yToRead,
           shouldFlipVertically, shouldFlipHorizontally
         )
 
@@ -272,7 +290,7 @@ final class PPU(runNMI: () => Unit, ppuMemory: Memory, drawFrame: Array[Array[(I
       val pixelY = currentLine
 
       if (currentX == 0) {
-        currentLineSpriteList = currentSprites.filter(_._1.containsY(pixelY))
+        currentLineSpriteList = currentSprites.filter(_._1.containsY(pixelY, spriteIs8x16))
       } else if (currentX >= 1 && currentX <= 256 && currentScrollY <= 240) { // TODO: handle negative scroll
         val spritePixel = getSpritePixelAt(pixelX, pixelY, currentLineSpriteList)
         val color =
