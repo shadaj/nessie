@@ -4,7 +4,7 @@ class Console(file: NESFile, drawFrame: Array[Array[(Int, Int, Int)]] => Unit, c
   println(s"Mapper: ${file.mapperNumber}")
   private val memoryProviders = Seq(
     new NESRam,
-    new APUIORegisters,
+    new APU,
     new ControllerRegisters(currentButtonState),
     file.mapperNumber match {
       case 0 => new Mapper0(file.programRom, file.chrRom, file.verticalMirror)

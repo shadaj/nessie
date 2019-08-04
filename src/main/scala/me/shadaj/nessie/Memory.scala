@@ -217,22 +217,6 @@ class Mapper2(prgRom: Array[Byte]) extends MemoryProvider with PPUMemoryProvider
   }
 }
 
-class APUIORegisters extends MemoryProvider {
-  val memory = new Array[Byte](24)
-
-  override def canReadAt(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014 && address != 0x4016 && address != 0x4017
-  override def canWriteAt(address: Int): Boolean = address >= 0x4000 && address < 0x4018 && address != 0x4014 && address != 0x4016
-
-  override def read(address: Int, memoryAccess: Memory): Byte = {
-    memory(address - 0x4000)
-  }
-
-  override def write(address: Int, value: Byte, memoryAccess: Memory): Unit = {
-    // TODO: are registers read only?
-    memory(address - 0x4000) = value
-  }
-}
-
 class ControllerRegisters(currentButtonState: () => Seq[Boolean]) extends MemoryProvider {
   private var incrementIndex = false
   private var currentIndex = 0

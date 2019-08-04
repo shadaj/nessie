@@ -53,6 +53,8 @@ object RunGame extends App {
     }
   })
 
+  val apu = new APU
+
   val console = new Console(NESFile.fromFile(new File(args.head)), f => {
     currentFrame = f
   }, () => buttonsPressed.toVector)
